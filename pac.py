@@ -1,5 +1,6 @@
 from z3 import *
 import math
+import pandas as pd
 
 
 def decide_pac(bg_knowledge, examples, query, validity):
@@ -36,19 +37,20 @@ def sample_size(confidence, gamma):
         raise ValueError('Gamma must be >0 and <=1')
 
 
-def create_examples(dataset, z3_vars, compression_factor=1):
+def create_examples(dataset, compression=1):
     """
     Turn dataset into examples in the form of inequalities that can be processed by Z3.
-    :param dataset: The dataset to convert
-    :param z3_vars: list of the Z3 variables corresponding to the columns of the dataset
-    :param compression_factor: How many rows of the original dataset will be turned into one example.
-                               If more than 1, the example will summarize the rows in the following way:
-                               The variable will be an interval between the min and max value of the rows
+    :param dataset: The dataset to convert, in form of a pandas dataframe
+    :param compression: How many rows of the original dataset will be turned into one example.
+                        If more than 1, the example will summarize the rows in the following way:
+                        The variable will be an interval between the min and max value of the rows compressed
     :return: a list of examples in the form of conjunctions of inequalities
     """
-    number_of_rows = int(len(dataset.index) / compression_factor)
-    examples = [
-        [And([And(z3_vars[j] >= dataset.iloc[i * compression_factor:i * compression_factor + compression_factor, j].min(),
-                  z3_vars[j] <= dataset.iloc[i * compression_factor:i * compression_factor + compression_factor, j].max())
-              for j in range(len(z3_vars))])] for i in range(number_of_rows)]
-    return examples
+    number_of_rows = int(len(dataset.index) / compression)
+    if number_of_rows < 1:
+        raise ValueError('Compression factor must be smaller than number of rows in the dataset.')
+    data = [[(dataset.iloc[i * compression:i * compression + compression, j].min(),
+              dataset.iloc[i * compression:i * compression + compression, j].max())
+             for j in range(len(dataset.columns))] for i in range(number_of_rows)]
+    df = pd.DataFrame.from_records(data, columns=dataset.columns)
+    return df

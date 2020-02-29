@@ -1,6 +1,7 @@
 from z3 import *
 import math
 import pandas as pd
+import numpy as np
 
 
 def decide_pac(bg_knowledge, examples, query, validity):
@@ -44,13 +45,14 @@ def create_examples(dataset, compression=1):
     :param compression: How many rows of the original dataset will be turned into one example.
                         If more than 1, the example will summarize the rows in the following way:
                         The variable will be an interval between the min and max value of the rows compressed
-    :return: a list of examples in the form of conjunctions of inequalities
+    :return: a dataframe of examples in the form of pairs of numbers (min, max)
     """
-    number_of_rows = int(len(dataset.index) / compression)
-    if number_of_rows < 1:
-        raise ValueError('Compression factor must be smaller than number of rows in the dataset.')
-    data = [[(dataset.iloc[i * compression:i * compression + compression, j].min(),
-              dataset.iloc[i * compression:i * compression + compression, j].max())
-             for j in range(len(dataset.columns))] for i in range(number_of_rows)]
-    df = pd.DataFrame.from_records(data, columns=dataset.columns)
-    return df
+    df = pd.DataFrame(columns=dataset.columns)
+    grouped_set = dataset.groupby(dataset.index // compression)
+    mins = grouped_set.min()
+    maxs = grouped_set.max()
+    return mins, maxs
+
+def is_in_range(observation, example):
+    #print(observation)
+    return None

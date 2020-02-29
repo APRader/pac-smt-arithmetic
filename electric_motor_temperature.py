@@ -17,16 +17,16 @@ def compress_dataset(train_compression, test_compression):
 
     train_set = df.loc[~df['profile_id'].isin([65, 72])]
     test_set = df.loc[df['profile_id'].isin([65, 72])]
-    train_set = pac.create_examples(train_set, train_compression)
-    train_set.to_csv(FILE_PATH + fr"\train_set{train_compression}.tsv", sep="\t", index=False)
+    min_train_set, max_train_set = pac.create_examples(train_set, train_compression)
+    #train_set.to_csv(FILE_PATH + fr"\train_set{train_compression}.tsv", sep="\t")
     tuc = time.perf_counter()
     print(f"Created train set in {tuc - toc:0.1f} seconds.")
-    test_set = pac.create_examples(test_set, test_compression)
-    test_set.to_csv(FILE_PATH + fr"\test_set{test_compression}.tsv", sep="\t", index=False)
+    min_test_set, max_test_set = pac.create_examples(test_set, test_compression)
+    #test_set.to_csv(FILE_PATH + fr"\test_set{test_compression}.tsv", sep="\t")
     tac = time.perf_counter()
     print(f"Created test set in {tac - tuc:0.1f} seconds.")
     print(f"Converted the whole dataset in {tac - toc:0.1f} seconds")
-    return None
+    return min_train_set, max_train_set, min_test_set, max_test_set
 
 
 def read_dataset(train_compression, test_compression):
@@ -40,13 +40,13 @@ ambient, coolant, u_d, u_q, motor_speed, torque, i_d, i_q, pm, stator_yoke, stat
 z3_vars = [ambient, coolant, u_d, u_q, motor_speed, torque, i_d, i_q, pm, stator_yoke, stator_tooth, stator_winding]
 set_option(rational_to_decimal=True)
 
-#compress_dataset(20, 5)
-examples, observations = read_dataset(20, 5)
+min_examples, max_examples, min_observations, max_observations = compress_dataset(10, 2)
+#examples, observations = read_dataset(20, 5)
 
-print(f"{len(examples)} examples.")
-print(f"{len(observations)} data points in the test set.")
+print(f"{len(min_examples)} examples.")
+print(f"{len(min_observations)} data points in the test set.")
 
-# target_features = ['pm', 'stator_tooth', 'stator_yoke', 'stator_winding']
+target_features = ['pm', 'stator_tooth', 'stator_yoke', 'stator_winding']
 
 confidence = 0.9
 gamma = 0.05
@@ -54,9 +54,11 @@ number_of_examples = pac.sample_size(confidence, gamma)
 print(f"{number_of_examples} examples needed for a confidence of {confidence} and gamma of {gamma}.")
 query = pm > 0
 
+min_observation = min_observations.iloc[0]
+max_observation = max_observations.iloc[0]
 '''
-for example in examples:
-    print(example)
+for index, row in min_examples.iterrows():
+    pac.is_in_range(min_examples, max_examples, row)
     bg_knowledge = test_set[0]
     truth = target_values[0]
     print(pac.decide_pac(bg_knowledge, examples, query, 0.61))

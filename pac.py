@@ -53,6 +53,12 @@ def create_examples(dataset, compression=1):
     maxs = grouped_set.max()
     return mins, maxs
 
-def is_in_range(observation, example):
-    #print(observation)
+def is_in_range(min_examples, max_examples, min_observation, max_observation):
+    min_rows = min_observation >= min_examples
+    max_rows = max_observation <= max_examples
+    all_rows = min_rows & max_rows
+    true_rows = all_rows.all(axis=1)
+    for (idx, entry) in true_rows.iteritems():
+        if entry:
+            print(idx)
     return None

@@ -53,12 +53,18 @@ def create_examples(dataset, compression=1):
     maxs = grouped_set.max()
     return mins, maxs
 
+
 def is_in_range(min_examples, max_examples, min_observation, max_observation):
-    min_rows = min_observation >= min_examples
-    max_rows = max_observation <= max_examples
-    all_rows = min_rows & max_rows
+    min_rows = (min_observation >= min_examples) & (min_observation <= max_examples)
+    max_rows = (max_observation <= max_examples) & (max_observation >= min_examples)
+    all_rows = min_rows | max_rows
+    #print(f"Example minimum: {min_examples.iloc[0]}")
+    #print(f"KB minimum: {min_observation}")
+    #print(f"is KB min > example min? {min_rows.iloc[0]}")
+    #print(f"Example maximum: {max_examples.iloc[0]}")
+    #print(f"KB maximum: {max_observation}")
+    #print(f"is KB max < example min? {max_rows.iloc[0]}")
+    #print(all_rows)
     true_rows = all_rows.all(axis=1)
-    for (idx, entry) in true_rows.iteritems():
-        if entry:
-            print(idx)
-    return None
+    true_indices = [idx for (idx, entry) in true_rows.iteritems() if entry]
+    return true_indices

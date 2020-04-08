@@ -5,6 +5,7 @@ import numpy as np
 
 
 def decide_pac(bg_knowledge, examples, query, validity):
+    state = 'Accept'
     if 0 <= validity <= 1:
         epsilon = 1 - validity
     else:
@@ -20,10 +21,10 @@ def decide_pac(bg_knowledge, examples, query, validity):
         if s.check() == sat:
             failed += 1
             if failed > b:
-                return 'Reject'
+                state = 'Reject'
         s.pop()
         s.push()
-    return 'Accept'
+    return state, failed/len(examples)
 
 
 # returns number of samples needed to guarantee required confidence and gamma
@@ -68,3 +69,8 @@ def is_in_range(min_examples, max_examples, min_observation, max_observation):
     true_rows = all_rows.all(axis=1)
     true_indices = [idx for (idx, entry) in true_rows.iteritems() if entry]
     return true_indices
+
+
+def mask_examples(examples, probability):
+    masked_examples = examples.mask(np.random.random(examples.shape) < probability)
+    return masked_examples

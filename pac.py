@@ -4,27 +4,32 @@ import pandas as pd
 import numpy as np
 
 
-def decide_pac(bg_knowledge, examples, query, validity):
-    state = 'Accept'
-    if 0 <= validity <= 1:
-        epsilon = 1 - validity
-    else:
-        raise ValueError('Validity must be between 0 and 1.')
-    b = math.floor(epsilon * len(examples))
-    failed = 0
-    s = Solver()
-    s.add(And(bg_knowledge, Not(query)))
-    s.push()
-    for example in examples:
-        s.add(example)
-        # if sat, then the entailment is rejected
-        if s.check() == sat:
-            failed += 1
-            if failed > b:
-                state = 'Reject'
-        s.pop()
+class PAC:
+    def __init__(self, z3_vars, knowledge_base):
+        self.z3_vars = z3_vars
+        self.knowledge_base = knowledge_base
+
+    def decide_pac(self, examples, query, validity):
+        state = 'Accept'
+        if 0 <= validity <= 1:
+            epsilon = 1 - validity
+        else:
+            raise ValueError('Validity must be between 0 and 1.')
+        b = math.floor(epsilon * len(examples))
+        failed = 0
+        s = Solver()
+        s.add(And(self.knowledge_base, Not(query)))
         s.push()
-    return state, failed/len(examples)
+        for example in examples:
+            s.add(example)
+            # if sat, then the entailment is rejected
+            if s.check() == sat:
+                failed += 1
+                if failed > b:
+                    state = 'Reject'
+            s.pop()
+            s.push()
+        return state, (1-failed/len(examples))
 
 
 # returns number of samples needed to guarantee required confidence and gamma

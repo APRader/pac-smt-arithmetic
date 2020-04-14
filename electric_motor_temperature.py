@@ -38,12 +38,6 @@ def compress_dataset(train_compression, test_compression):
     return min_train_set, max_train_set, min_test_set, max_test_set
 
 
-def read_dataset(train_compression, test_compression):
-    train_set = pd.read_csv(FILE_PATH + fr"\train_set{train_compression}.tsv", sep="\t")
-    test_set = pd.read_csv(FILE_PATH + fr"\test_set{test_compression}.tsv", sep="\t")
-    return train_set, test_set
-
-
 def match_examples(min_observation_feats, max_observation_feats, min_example_feats, max_example_feats):
     matched_examples = []
     tic = time.perf_counter()
@@ -83,24 +77,28 @@ def create_formulas():
 
     compression = 10
     min_vals, max_vals = pac.create_examples(data, compression)
-    min_examples = pac.mask_examples(min_vals, 0.1)
-    max_examples = pac.mask_examples(min_vals, 0.1)
+    min_examples = pac.mask_examples(min_vals, 0.0)
+    max_examples = pac.mask_examples(min_vals, 0.0)
 
     return knowledge_base, min_examples, max_examples
 
 
-
 ambient, coolant, u_d, u_q, motor_speed, torque, i_d, i_q, pm, stator_yoke, stator_tooth, stator_winding = \
     Reals('ambient coolant u_d u_q motor_speed torque i_d i_q pm stator_yoke stator_tooth stator_winding')
-z3_vars = [ambient, coolant, u_d, u_q, motor_speed, torque, i_d, i_q, pm, stator_yoke, stator_tooth, stator_winding]
+z3_vars = {'ambient': ambient, 'coolant': coolant, 'u_d': u_d, 'u_q': u_q, 'motor_speed': motor_speed, 'torque': torque,
+           'i_d': i_d, 'i_q': i_q, 'pm': pm, 'stator_yoke': stator_yoke, 'stator_tooth': stator_tooth,
+           'stator_winding': stator_winding}
 set_option(rational_to_decimal=True)
 
 knowledge_base, min_examples, max_examples = create_formulas()
+
+pac_object = pac.PAC(z3_vars, knowledge_base)
 
 print(f"{len(min_examples)} examples.")
 
 confidence = 0.9
 gamma = 0.05
+validity = 0.75
 number_of_examples = pac.sample_size(confidence, gamma)
 print(f"{number_of_examples} examples needed for a confidence of {confidence} and gamma of {gamma}.")
 query = pm - ambient > 0
@@ -112,14 +110,14 @@ for index in range(number_of_examples):
     min_pm = min_examples.at[index, "pm"]
     max_pm = max_examples.at[index, "pm"]
     inequalities = []
-    if not(math.isnan(min_ambient)): inequalities.append(ambient >= min_ambient)
-    if not(math.isnan(max_ambient)): inequalities.append(ambient <= max_ambient)
-    if not(math.isnan(min_pm)): inequalities.append(pm >= min_pm)
-    if not(math.isnan(max_pm)): inequalities.append(pm <= max_pm)
+    if not (math.isnan(min_ambient)): inequalities.append(ambient >= min_ambient)
+    if not (math.isnan(max_ambient)): inequalities.append(ambient <= max_ambient)
+    if not (math.isnan(min_pm)): inequalities.append(pm >= min_pm)
+    if not (math.isnan(max_pm)): inequalities.append(pm <= max_pm)
     examples.append(And(inequalities))
 
-state, failed_ratio = pac.decide_pac(knowledge_base, examples, query, 0.8)
-print(f"PAC has spoken: {state}, because {failed_ratio} examples failed.")
+state, valid_ratio = pac_object.decide_pac(examples, query, validity)
+print(f"PAC has spoken: {state}, because {valid_ratio} examples were valid.")
 
 '''
 min_examples, max_examples, min_observations, max_observations = compress_dataset(TRAIN_COMPR, TEST_COMPR)
@@ -144,5 +142,3 @@ plt.xlabel("Number of matched examples")
 plt.ylabel("Count")
 plt.show()
 '''
-
-

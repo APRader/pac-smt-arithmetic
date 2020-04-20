@@ -1,6 +1,5 @@
 from z3 import *
 import math
-import pandas as pd
 import numpy as np
 
 
@@ -10,6 +9,13 @@ class PAC:
         self.knowledge_base = knowledge_base
 
     def decide_pac(self, examples, query, validity):
+        """
+        PAC decision procedure.
+        :param examples: Examples in the form of a list of Z3 formulas.
+        :param query: Z3 formula whose entailment will be decided given examples and background knowledge.
+        :param validity: A number from 0 to 1, that represents the validity. Higher number means higher validity.
+        :return: The state ("Accept" or "Reject") and the proportion of examples that entailed the query.
+        """
         state = 'Accept'
         if 0 <= validity <= 1:
             epsilon = 1 - validity
@@ -32,8 +38,13 @@ class PAC:
         return state, (1-failed/len(examples))
 
 
-# returns number of samples needed to guarantee required confidence and gamma
 def sample_size(confidence, gamma):
+    """
+    Calculates number of examples needed to guarantee required confidence and deviation.
+    :param confidence: Number from 0 to 1 which represents the confidence. Higher number means higher confidence.
+    :param gamma: Number from 0 to 1 which represents the amount of deviation allowed from estimate.
+    :return: Number of examples needed.
+    """
     if 0 < confidence <= 1:
         delta = 1 - confidence
     else:
@@ -46,14 +57,11 @@ def sample_size(confidence, gamma):
 
 def create_examples(dataset, compression=1):
     """
-    Turn dataset into examples in the form of inequalities that can be processed by Z3.
-    :param dataset: The dataset to convert, in form of a pandas dataframe
+    Turn dataset into examples in the form of minimum and maximum values.
+    :param dataset: The dataset to convert, in form of a pandas dataframe.
     :param compression: How many rows of the original dataset will be turned into one example.
-                        If more than 1, the example will summarize the rows in the following way:
-                        The variable will be an interval between the min and max value of the rows compressed
-    :return: a dataframe of examples in the form of pairs of numbers (min, max)
+    :return: Two dataframes min and max, which contain the minimum and maximum values for each interval per row.
     """
-    df = pd.DataFrame(columns=dataset.columns)
     grouped_set = dataset.groupby(dataset.index // compression)
     mins = grouped_set.min()
     maxs = grouped_set.max()
@@ -61,21 +69,29 @@ def create_examples(dataset, compression=1):
 
 
 def is_in_range(min_examples, max_examples, min_observation, max_observation):
+    """
+    Check which examples an observation is in range of for each variable.
+    :param min_examples: A dataframe containing the minimum bounds of each variable. Each row represents one example.
+    :param max_examples: A dataframe containing the maximum bounds of each variable. Each row represents one example.
+    :param min_observation: A series containing the minimum bound of each variable. Contains one observation.
+    :param max_observation: A series containing the maximum bound of each variable. Contains one observation.
+    :return: The row indices for the examples that matched the observation.
+    """
+    # The interval for the observation has to overlap with the example interval.
     min_rows = (min_observation >= min_examples) & (min_observation <= max_examples)
     max_rows = (max_observation <= max_examples) & (max_observation >= min_examples)
     all_rows = min_rows | max_rows
-    #print(f"Example minimum: {min_examples.iloc[0]}")
-    #print(f"KB minimum: {min_observation}")
-    #print(f"is KB min > example min? {min_rows.iloc[0]}")
-    #print(f"Example maximum: {max_examples.iloc[0]}")
-    #print(f"KB maximum: {max_observation}")
-    #print(f"is KB max < example min? {max_rows.iloc[0]}")
-    #print(all_rows)
     true_rows = all_rows.all(axis=1)
     true_indices = [idx for (idx, entry) in true_rows.iteritems() if entry]
     return true_indices
 
 
-def mask_examples(examples, probability):
+def random_masking(examples, probability):
+    """
+    Randomly masks values by replacing them with NaN.
+    :param examples: A dataframe containing values.
+    :param probability: A number from 0 to 1 representing the probability of each entry getting masked.
+    :return: A dataframe with some values replaced by NaN.
+    """
     masked_examples = examples.mask(np.random.random(examples.shape) < probability)
     return masked_examples

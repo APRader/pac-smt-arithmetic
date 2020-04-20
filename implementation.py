@@ -1,10 +1,18 @@
 import pandas as pd
+import motor_util
+import time
 
-df = pd.read_csv('pmsm_temperature_data.csv')
-yeet = df['ambient'] - df['pm']
-print('yeet')
+COMPRESSION = 20
 
+tic = time.perf_counter()
 
+df_train, df_test = motor_util.load_dataset()
+toc = time.perf_counter()
+print(f"Loaded dataset in {toc - tic:0.1f} seconds.")
+
+min_train, max_train = motor_util.compress_dataset(df_train, COMPRESSION)
+tuc = time.perf_counter()
+print(f"Compressed dataset in {tuc - toc:0.1f} seconds.")
 '''
 ambient, coolant, u_d, u_q, motor_speed, torque, i_d, i_q, pm, stator_yoke, stator_tooth, stator_winding = \
     Reals('ambient coolant u_d u_q motor_speed torque i_d i_q pm stator_yoke stator_tooth stator_winding')

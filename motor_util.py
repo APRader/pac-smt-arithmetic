@@ -16,38 +16,25 @@ def load_dataset():
     return train_set, test_set
 
 
-def compress_dataset(dataset, train_compression, test_compression):
+def compress_dataset(dataset, compression):
     """
-    Randomly masks values by replacing them with NaN.
-    :param examples: A dataframe containing values.
-    :param probability: A number from 0 to 1 representing the probability of each entry getting masked.
-    :return: A dataframe with some values replaced by NaN.
+    Compress the dataset while respecting profile_id boundaries.
+    :param dataset: The dataset to convert, in form of a pandas dataframe.
+    :param compression: How many rows of the original dataset will be turned into one row.
+    :return: Two dataframes min and max, which contain the minimum and maximum values for each interval per row.
     """
-    tic = time.perf_counter()
-
-    df = pd.read_csv('pmsm_temperature_data.csv')
-    # print(len(df.index))
-
-    toc = time.perf_counter()
-    print(f"Read the dataset in in {toc - tic:0.1f} seconds.")
-
-    # train_set = df.loc[~df['profile_id'].isin([65, 72])]
-    # test_set = df.loc[df['profile_id'].isin([65, 72])]
-
-    train_set = df.loc[df['profile_id'].isin([4])]
-    test_set = train_set[0:30000]
-    train_set = train_set[30000:]
-
-    min_train_set, max_train_set = pac.create_examples(train_set.drop(['profile_id'], axis=1), train_compression)
-    # train_set.to_csv(FILE_PATH + fr"\train_set{train_compression}.tsv", sep="\t")
-    tuc = time.perf_counter()
-    print(f"Created train set in {tuc - toc:0.1f} seconds.")
-    min_test_set, max_test_set = pac.create_examples(test_set.drop(['profile_id'], axis=1), test_compression)
-    # test_set.to_csv(FILE_PATH + fr"\test_set{test_compression}.tsv", sep="\t")
-    tac = time.perf_counter()
-    print(f"Created test set in {tac - tuc:0.1f} seconds.")
-    print(f"Converted the whole dataset in {tac - toc:0.1f} seconds")
-    return min_train_set, max_train_set, min_test_set, max_test_set
+    profile_ids = dataset.profile_id.unique()
+    min_data = pd.DataFrame()
+    max_data = pd.DataFrame()
+    for profile_id in profile_ids:
+        data_slice = dataset[dataset['profile_id'] == profile_id]
+        min_slice, max_slice = pac.create_examples(data_slice.drop(['profile_id'], axis=1), compression)
+        # add profile_id column back
+        min_slice['profile_id'] = profile_id
+        max_slice['profile_id'] = profile_id
+        min_data = min_data.append(min_slice)
+        max_data = max_data.append(max_slice)
+    return min_data, max_data
 
 
 def match_examples(min_observation_feats, max_observation_feats, min_example_feats, max_example_feats):

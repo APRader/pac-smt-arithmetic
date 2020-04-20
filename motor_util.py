@@ -23,10 +23,9 @@ def compress_dataset(dataset, compression):
     :param compression: How many rows of the original dataset will be turned into one row.
     :return: Two dataframes min and max, which contain the minimum and maximum values for each interval per row.
     """
-    profile_ids = dataset.profile_id.unique()
     min_data = pd.DataFrame()
     max_data = pd.DataFrame()
-    for profile_id in profile_ids:
+    for profile_id in dataset.profile_id.unique():
         data_slice = dataset[dataset['profile_id'] == profile_id]
         min_slice, max_slice = pac.create_examples(data_slice.drop(['profile_id'], axis=1), compression)
         # add profile_id column back

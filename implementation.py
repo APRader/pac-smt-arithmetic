@@ -1,19 +1,11 @@
-import pandas as pd
 import motor_util
 import time
+import pac
+from z3 import *
 
-COMPRESSION = 20
+KB_COMPRESSION = 1000000  # compression factor for knowledge base, larger than amount of data points in any profile
+EXAMPLE_COMPRESSION = 10
 
-tic = time.perf_counter()
-
-df_train, df_test = motor_util.load_dataset()
-toc = time.perf_counter()
-print(f"Loaded dataset in {toc - tic:0.1f} seconds.")
-
-min_train, max_train = motor_util.compress_dataset(df_train, COMPRESSION)
-tuc = time.perf_counter()
-print(f"Compressed dataset in {tuc - toc:0.1f} seconds.")
-'''
 ambient, coolant, u_d, u_q, motor_speed, torque, i_d, i_q, pm, stator_yoke, stator_tooth, stator_winding = \
     Reals('ambient coolant u_d u_q motor_speed torque i_d i_q pm stator_yoke stator_tooth stator_winding')
 z3_vars = {'ambient': ambient, 'coolant': coolant, 'u_d': u_d, 'u_q': u_q, 'motor_speed': motor_speed, 'torque': torque,
@@ -21,7 +13,41 @@ z3_vars = {'ambient': ambient, 'coolant': coolant, 'u_d': u_d, 'u_q': u_q, 'moto
            'stator_winding': stator_winding}
 set_option(rational_to_decimal=True)
 
-knowledge_base, min_examples, max_examples = create_formulas()
+tic = time.perf_counter()
+
+# Load dataset
+df_train, df_test = motor_util.load_dataset()
+toc = time.perf_counter()
+print(f"Loaded dataset in {toc - tic:0.1f} seconds.")
+
+# For knowledge base, each profile will create one min and one max
+min_kb, max_kb = motor_util.compress_dataset(df_train, KB_COMPRESSION)
+min_examples, max_examples = motor_util.compress_dataset(df_train, EXAMPLE_COMPRESSION)
+tuc = time.perf_counter()
+print(f"Compressed dataset in {tuc - toc:0.1f} seconds.")
+
+query = ambient - pm > 0
+validity = 0.8
+# Do PAC decision procedure for each profile separately
+for profile_id in min_kb.profile_id.unique():
+    tuc = time.perf_counter()
+    mins = min_kb[min_kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
+    maxs = max_kb[max_kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
+    knowledge_base = And([z3_vars.get(col) >= mins.at[0, col] for col in mins.columns] +
+                         [z3_vars.get(col) <= maxs.at[0, col] for col in maxs.columns])
+    pac_object = pac.PAC(z3_vars, knowledge_base)
+    mins = min_examples[min_examples['profile_id'] == profile_id].drop(['profile_id'], axis=1)
+    maxs = max_examples[max_examples['profile_id'] == profile_id].drop(['profile_id'], axis=1)
+    print(f"Profile {profile_id} contains {len(mins)} examples")
+    examples = [And([z3_vars.get(col) >= mins.at[row, col] for col in mins.columns] +
+                    [z3_vars.get(col) <= maxs.at[row, col] for col in maxs.columns]) for row in mins.index]
+    decision, prop_valid = pac_object.decide_pac(examples, query, validity)
+    tac = time.perf_counter()
+    print(f"PAC decided to {decision} since {prop_valid} of the examples were valid "
+          f"after thinking for {tac - tuc:0.1f} seconds.")
+
+'''
+
 
 pac_object = pac.PAC(z3_vars, knowledge_base)
 

@@ -31,21 +31,25 @@ validity = 0.8
 # Do PAC decision procedure for each profile separately
 for profile_id in min_kb.profile_id.unique():
     tuc = time.perf_counter()
+    pac_object = pac.PAC(z3_vars)
+
     mins = min_kb[min_kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
     maxs = max_kb[max_kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
-    knowledge_base = And([z3_vars.get(col) >= mins.at[0, col] for col in mins.columns] +
-                         [z3_vars.get(col) <= maxs.at[0, col] for col in maxs.columns])
-    pac_object = pac.PAC(z3_vars, knowledge_base)
+    knowledge_base = pac_object.create_inequalities(mins, maxs)
+    pac_object.knowledge_base = knowledge_base[0]
+
     mins = min_examples[min_examples['profile_id'] == profile_id].drop(['profile_id'], axis=1)
     maxs = max_examples[max_examples['profile_id'] == profile_id].drop(['profile_id'], axis=1)
-    print(f"Profile {profile_id} contains {len(mins)} examples")
-    examples = [And([z3_vars.get(col) >= mins.at[row, col] for col in mins.columns] +
-                    [z3_vars.get(col) <= maxs.at[row, col] for col in maxs.columns]) for row in mins.index]
+    print(f"Profile {profile_id} contains {len(mins)} examples.")
+    examples = pac_object.create_inequalities(mins, maxs)
+
     decision, prop_valid = pac_object.decide_pac(examples, query, validity)
     tac = time.perf_counter()
-    print(f"PAC decided to {decision} since {prop_valid} of the examples were valid "
+    print(f"PAC decided to {decision} since {prop_valid:0.3f} of the examples were valid "
           f"after thinking for {tac - tuc:0.1f} seconds.")
 
+tac = time.perf_counter()
+print(f"The entire process took {tac - tic:0.1f} seconds.")
 '''
 
 

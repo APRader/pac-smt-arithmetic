@@ -6,7 +6,7 @@ import numpy as np
 class PAC:
     def __init__(self, z3_vars, knowledge_base=None):
         if knowledge_base is None:
-            knowledge_base = {}
+            knowledge_base = []
         self.z3_vars = z3_vars
         self.knowledge_base = knowledge_base
 
@@ -37,7 +37,18 @@ class PAC:
                     state = 'Reject'
             s.pop()
             s.push()
-        return state, (1-failed/len(examples))
+        return state, (1 - failed / len(examples))
+
+    def create_inequalities(self, min_data, max_data):
+        """
+        Turn minimum and maximum data into Z3 inequalities.
+        :param min_data: Dataframe where each row represents the minimum values of an instance.
+        :param max_data: Dataframe where each row represents the maximum values of an instance.
+        :return: A list of Z3 formulas that are conjunctions of inequalities.
+        """
+        return [And([self.z3_vars.get(col) >= min_data.at[row, col] for col in min_data.columns] +
+                    [self.z3_vars.get(col) <= max_data.at[row, col] for col in max_data.columns]) for row in
+                min_data.index]
 
 
 def sample_size(confidence, gamma):

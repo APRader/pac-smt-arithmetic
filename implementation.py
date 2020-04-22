@@ -2,6 +2,9 @@ import motor_util
 import time
 import pac
 from z3 import *
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 KB_COMPRESSION = 1000000  # compression factor for knowledge base, larger than amount of data points in any profile
 EXAMPLE_COMPRESSION = 10
@@ -28,25 +31,33 @@ print(f"Compressed dataset in {tuc - toc:0.1f} seconds.")
 
 query = ambient - pm > 0
 validity = 0.8
-# Do PAC decision procedure for each profile separately
-for profile_id in min_kb.profile_id.unique():
-    tuc = time.perf_counter()
-    pac_object = pac.PAC(z3_vars)
+print("Validity set to {validity}.")
 
-    mins = min_kb[min_kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
-    maxs = max_kb[max_kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
-    knowledge_base = pac_object.create_inequalities(mins, maxs)
-    pac_object.knowledge_base = knowledge_base[0]
+validities = pd.DataFrame(columns=min_kb.profile_id.unique(), index=[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1])
+for masking in [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]:
+    print(f"Masking probability of {masking:0.1f}.")
+    # Do PAC decision procedure for each profile separately
+    for profile_id in [4,6]:  # min_kb.profile_id.unique():
+        tuc = time.perf_counter()
+        pac_object = pac.PAC(z3_vars)
 
-    mins = min_examples[min_examples['profile_id'] == profile_id].drop(['profile_id'], axis=1)
-    maxs = max_examples[max_examples['profile_id'] == profile_id].drop(['profile_id'], axis=1)
-    print(f"Profile {profile_id} contains {len(mins)} examples.")
-    examples = pac_object.create_inequalities(mins, maxs)
+        mins = min_kb[min_kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
+        maxs = max_kb[max_kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
+        knowledge_base = pac_object.create_inequalities(mins, maxs)
+        pac_object.knowledge_base = knowledge_base[0]
 
-    decision, prop_valid = pac_object.decide_pac(examples, query, validity)
-    tac = time.perf_counter()
-    print(f"PAC decided to {decision} since {prop_valid:0.3f} of the examples were valid "
-          f"after thinking for {tac - tuc:0.1f} seconds.")
+        mins = min_examples[min_examples['profile_id'] == profile_id].drop(['profile_id'], axis=1)
+        maxs = max_examples[max_examples['profile_id'] == profile_id].drop(['profile_id'], axis=1)
+        mins = pac.random_masking(mins, masking)
+        maxs = pac.random_masking(maxs, masking)
+        print(f"Profile {profile_id} contains {len(mins)} examples.")
+        examples = pac_object.create_inequalities(mins, maxs)
+
+        decision, prop_valid = pac_object.decide_pac(examples, query, validity)
+        validities.at[masking, profile_id] = prop_valid
+        tac = time.perf_counter()
+        print(f"PAC decided to {decision} since {prop_valid:0.3f} of the examples were valid "
+              f"after thinking for {tac - tuc:0.1f} seconds.")
 
 tac = time.perf_counter()
 print(f"The entire process took {tac - tic:0.1f} seconds.")

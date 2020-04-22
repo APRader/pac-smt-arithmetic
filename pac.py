@@ -1,6 +1,7 @@
 from z3 import *
 import math
 import numpy as np
+import time
 
 
 class PAC:
@@ -46,9 +47,12 @@ class PAC:
         :param max_data: Dataframe where each row represents the maximum values of an instance.
         :return: A list of Z3 formulas that are conjunctions of inequalities.
         """
-        return [And([self.z3_vars.get(col) >= min_data.at[row, col] for col in min_data.columns] +
-                    [self.z3_vars.get(col) <= max_data.at[row, col] for col in max_data.columns]) for row in
-                min_data.index]
+        return [And(
+            [self.z3_vars.get(col) >= min_data.at[row, col] for col in min_data.columns
+             if not math.isnan(min_data.at[row, col])] +
+            [self.z3_vars.get(col) <= max_data.at[row, col] for col in max_data.columns
+             if not math.isnan(max_data.at[row, col])])
+            for row in min_data.index]
 
 
 def sample_size(confidence, gamma):

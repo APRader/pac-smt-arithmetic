@@ -56,27 +56,3 @@ def match_examples(min_observation_feats, max_observation_feats, min_example_fea
     return matched_examples
 
 
-def create_formulas():
-    tic = time.perf_counter()
-
-    df = pd.read_csv('pmsm_temperature_data.csv')
-
-    toc = time.perf_counter()
-    print(f"Read the dataset in in {toc - tic:0.1f} seconds.")
-
-    data = df.loc[df['profile_id'] == 4]
-    compression = len(data)
-    min_val, max_val = pac.create_examples(data, compression)
-    knowledge_base = And(ambient >= min_val.at[0, "ambient"], ambient <= max_val.at[0, "ambient"],
-                         pm >= min_val.at[0, "pm"], pm <= max_val.at[0, "pm"])
-
-    tuc = time.perf_counter()
-    print(f"Created knowledge base in {tuc - toc:0.1f} seconds.")
-
-    compression = 10
-    min_vals, max_vals = pac.create_examples(data, compression)
-    min_examples = pac.random_masking(min_vals, 0.0)
-    max_examples = pac.random_masking(min_vals, 0.0)
-
-    return knowledge_base, min_examples, max_examples
-

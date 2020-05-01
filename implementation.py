@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 KB_COMPRESSION = 1000000  # compression factor for knowledge base, larger than amount of data points in any profile
 EXAMPLE_COMPRESSION = 10
-MASKING_PROBABILITIES = [0.1] #[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+MASKING_PROBABILITIES = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 
 ambient, coolant, u_d, u_q, motor_speed, torque, i_d, i_q, pm, stator_yoke, stator_tooth, stator_winding = \
     Reals('ambient coolant u_d u_q motor_speed torque i_d i_q pm stator_yoke stator_tooth stator_winding')
@@ -19,7 +19,7 @@ set_option(rational_to_decimal=True)
 tic = time.perf_counter()
 
 # Load dataset
-df_train, df_test = motor_util.load_dataset()
+df_train, _ = motor_util.load_dataset()
 toc = time.perf_counter()
 print(f"Loaded dataset in {toc - tic:0.1f} seconds.")
 

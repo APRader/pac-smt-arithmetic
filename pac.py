@@ -94,12 +94,9 @@ def is_in_range(min_examples, max_examples, min_observation, max_observation):
     :param max_observation: A series containing the maximum bound of each variable. Contains one observation.
     :return: The row indices for the examples that matched the observation.
     """
-    # The interval for the observation has to overlap with the example interval.
-    min_rows = (min_observation >= min_examples) & (min_observation <= max_examples)
-    max_rows = (max_observation <= max_examples) & (max_observation >= min_examples)
-    all_rows = min_rows | max_rows
-    true_rows = all_rows.all(axis=1)
-    true_indices = [idx for (idx, entry) in true_rows.iteritems() if entry]
+    # The interval for the observation has to be within the example interval.
+    true_rows = ((min_observation >= min_examples) & (max_observation <= max_examples)).all(axis=1)
+    true_indices = true_rows.index[true_rows]
     return true_indices
 
 

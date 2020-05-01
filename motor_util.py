@@ -1,8 +1,5 @@
 import pandas as pd
-from z3 import *
 import pac
-import time
-
 
 def load_dataset():
     """
@@ -34,25 +31,5 @@ def compress_dataset(dataset, compression):
         min_data = min_data.append(min_slice)
         max_data = max_data.append(max_slice)
     return min_data, max_data
-
-
-def match_examples(min_observation_feats, max_observation_feats, min_example_feats, max_example_feats):
-    matched_examples = []
-    tic = time.perf_counter()
-    for i in range(1000):  # len(min_observations)):
-        min_observation = min_observation_feats.iloc[i]
-        max_observation = max_observation_feats.iloc[i]
-        indices = pac.is_in_range(min_example_feats, max_example_feats, min_observation, max_observation)
-        # print(indices)
-        # for index in indices:
-        #    print(f"actual temperature between {min_observations.iloc[index]} and {max_observations.iloc[index]}")
-        matched_examples.append(len(indices))
-        if i % 100 == 0:
-            toc = time.perf_counter()
-            print(f"First {i} observations processed in {toc - tic:0.1f} seconds.")
-        # print(f"The observation is in range of {len(indices)} examples")
-    toc = time.perf_counter()
-    # print(f"All {len(min_observations)} observations processed in {toc - tic:0.1f} seconds..")
-    return matched_examples
 
 

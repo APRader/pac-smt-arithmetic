@@ -32,6 +32,8 @@ def compress_dataset(dataset, compression):
         max_slice['profile_id'] = profile_id
         min_data = min_data.append(min_slice)
         max_data = max_data.append(max_slice)
+    min_data.reset_index(inplace=True, drop=True)
+    max_data.reset_index(inplace=True, drop=True)
     return min_data, max_data
 
 

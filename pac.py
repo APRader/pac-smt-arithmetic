@@ -76,7 +76,7 @@ def create_examples(dataset, compression=1):
     Turn dataset into examples in the form of minimum and maximum values.
     :param dataset: The dataset to convert, in form of a pandas dataframe.
     :param compression: How many rows of the original dataset will be turned into one example.
-    :return: Two dataframes min and max, which contain the minimum and maximum values for each interval per row.
+    :return: Two dataframes mins and maxs, which contain the minimum and maximum values for each interval per row.
     """
     grouped_set = dataset.groupby(dataset.index // compression)
     mins = grouped_set.min()
@@ -84,19 +84,44 @@ def create_examples(dataset, compression=1):
     return mins, maxs
 
 
-def is_in_range(min_examples, max_examples, min_observation, max_observation):
+def is_in_range(min_examples, max_examples, min_observations, max_observations):
     """
-    Check which examples an observation is in range of for each variable.
+    Check how many examples each observation is in range of.
     :param min_examples: A dataframe containing the minimum bounds of each variable. Each row represents one example.
     :param max_examples: A dataframe containing the maximum bounds of each variable. Each row represents one example.
-    :param min_observation: A series containing the minimum bound of each variable. Contains one observation.
-    :param max_observation: A series containing the maximum bound of each variable. Contains one observation.
-    :return: The row indices for the examples that matched the observation.
+    :param min_observations: A dataframe with the minimum bounds of each variable. Each row represents one observation.
+    :param max_observations: A dataframe with the maximum bound sof each variable. Each row represents one observation.
+    :return: A list containing the number of examples each observation is in range of.
     """
     # The interval for the observation has to be within the example interval.
-    true_rows = ((min_observation >= min_examples) & (max_observation <= max_examples)).all(axis=1)
-    true_indices = true_rows.index[true_rows]
+    min_indices = min_observations.apply(find_min_indices, args=(min_examples,), axis=1)
+    max_indices = max_observations.apply(find_max_indices, args=(max_examples,), axis=1)
+    true_indices = [len(min_indices[i].intersection(max_indices[i])) for i in range(len(min_indices))]
     return true_indices
+
+
+def find_min_indices(min_observation, min_examples):
+    """
+    Find the indices for which the observation has minimum values above the example minimum values.
+    :param min_observation: A series with the minimum bound of each variable. Contains one observation.
+    :param min_examples: A dataframe containing the minimum bounds of each variable. Each row represents one example.
+    :return: The indices of the examples where the observation had higher values for each variable.
+    """
+    min_rows = (min_observation >= min_examples).all(axis=1)
+    min_indices = min_rows.index[min_rows]
+    return min_indices
+
+
+def find_max_indices(max_observation, max_examples):
+    """
+    Find the indices for which the observation has a maximum value below the example maximum values.
+    :param max_observation: A series with the maximum bound of each variable. Contains one observation.
+    :param max_examples: A dataframe containing the maximum bounds of each variable. Each row represents one example.
+    :return: The indices of the examples where the observation had lower values for each variable.
+    """
+    max_rows = (max_observation <= max_examples).all(axis=1)
+    max_indices = max_rows.index[max_rows]
+    return max_indices
 
 
 def random_masking(examples, probability):

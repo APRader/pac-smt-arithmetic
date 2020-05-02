@@ -3,8 +3,8 @@ import motor_util
 import pac
 import matplotlib.pyplot as plt
 
-KB_COMPRESSION = 10  # compression factor for knowledge base, represents current observations
-EXAMPLE_COMPRESSION = 10000
+KB_COMPRESSION = 5  # compression factor for knowledge base, represents current observations
+EXAMPLE_COMPRESSION = 1000
 
 z3_vars = motor_util.set_up_variables()
 
@@ -28,19 +28,18 @@ print(f"{number_of_examples} examples needed for a confidence of {confidence} an
 query = z3_vars.get("pm") - z3_vars.get("ambient") > 0
 
 tuc = time.perf_counter()
-matched_examples = []
-for i in range(len(min_kb)):
-    indices = pac.is_in_range(
-        min_examples.drop(['profile_id'], axis=1), max_examples.drop(['profile_id'], axis=1),
-        min_kb.drop(['profile_id'], axis=1).iloc[i], max_kb.drop(['profile_id'], axis=1).iloc[i])
-    matched_examples.append(len(indices))
-    if i % 1000 == 0:
-        tac = time.perf_counter()
-        print(f"First {i} observations processed in {tac - tuc:0.1f} seconds.")
+matched_examples = pac.is_in_range(
+    min_examples.drop(['profile_id'], axis=1), max_examples.drop(['profile_id'], axis=1),
+    min_kb.drop(['profile_id'], axis=1), max_kb.drop(['profile_id'], axis=1))
 
 plt.hist(matched_examples)
-plt.title(f"Matched examples for example compression of {EXAMPLE_COMPRESSION} "
+plt.title(f"Example compression of {EXAMPLE_COMPRESSION} "
           f"and observation compression of {KB_COMPRESSION}")
 plt.xlabel("Number of matched examples")
 plt.ylabel("Count")
-plt.show()
+plt.savefig(f"Ob{KB_COMPRESSION}Ex{EXAMPLE_COMPRESSION}.svg")
+
+tac = time.perf_counter()
+
+print(f"Total running time: {tac - tic:0.1f} seconds.")
+

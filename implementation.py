@@ -1,7 +1,6 @@
 import motor_util
 import time
 import pac
-from z3 import *
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -9,12 +8,7 @@ KB_COMPRESSION = 1000000  # compression factor for knowledge base, larger than a
 EXAMPLE_COMPRESSION = 10
 MASKING_PROBABILITIES = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 
-ambient, coolant, u_d, u_q, motor_speed, torque, i_d, i_q, pm, stator_yoke, stator_tooth, stator_winding = \
-    Reals('ambient coolant u_d u_q motor_speed torque i_d i_q pm stator_yoke stator_tooth stator_winding')
-z3_vars = {'ambient': ambient, 'coolant': coolant, 'u_d': u_d, 'u_q': u_q, 'motor_speed': motor_speed, 'torque': torque,
-           'i_d': i_d, 'i_q': i_q, 'pm': pm, 'stator_yoke': stator_yoke, 'stator_tooth': stator_tooth,
-           'stator_winding': stator_winding}
-set_option(rational_to_decimal=True)
+z3_vars = motor_util.set_up_variables()
 
 tic = time.perf_counter()
 
@@ -29,7 +23,7 @@ min_examples, max_examples = motor_util.compress_dataset(df_train, EXAMPLE_COMPR
 tuc = time.perf_counter()
 print(f"Compressed dataset in {tuc - toc:0.1f} seconds.")
 
-query = i_d + u_d + i_q - u_q > 0
+query = z3_vars.get("i_d") * z3_vars.get("u_d") + z3_vars.get("i_q") * z3_vars.get("u_q") > 0
 validity = 0.8
 print(f"Validity set to {validity}.")
 validities = pd.DataFrame(columns=min_kb.profile_id.unique()[:10], index=MASKING_PROBABILITIES)

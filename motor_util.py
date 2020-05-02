@@ -1,5 +1,7 @@
 import pandas as pd
 import pac
+from z3 import *
+
 
 def load_dataset():
     """
@@ -33,3 +35,15 @@ def compress_dataset(dataset, compression):
     return min_data, max_data
 
 
+def set_up_variables():
+    """
+    Create all Z3 variables from the motor dataset.
+    :return: A dictionary of all the variables, where the key is the column name of each variable.
+    """
+    ambient, coolant, u_d, u_q, motor_speed, torque, i_d, i_q, pm, stator_yoke, stator_tooth, stator_winding = \
+        Reals('ambient coolant u_d u_q motor_speed torque i_d i_q pm stator_yoke stator_tooth stator_winding')
+    z3_vars = {'ambient': ambient, 'coolant': coolant, 'u_d': u_d, 'u_q': u_q, 'motor_speed': motor_speed,
+               'torque': torque, 'i_d': i_d, 'i_q': i_q, 'pm': pm, 'stator_yoke': stator_yoke,
+               'stator_tooth': stator_tooth, 'stator_winding': stator_winding}
+    set_option(rational_to_decimal=True)
+    return z3_vars

@@ -1,7 +1,6 @@
 from z3 import *
 import math
 import numpy as np
-import time
 
 
 class PAC:

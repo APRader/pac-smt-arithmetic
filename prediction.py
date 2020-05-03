@@ -3,8 +3,8 @@ import motor_util
 import pac
 import matplotlib.pyplot as plt
 
-KB_COMPRESSION = 5  # compression factor for knowledge base, represents current observations
-EXAMPLE_COMPRESSION = 1000
+KB_COMPRESSION = 1  # compression factor for knowledge base, represents current observations
+EXAMPLE_COMPRESSION = 500
 
 z3_vars = motor_util.set_up_variables()
 
@@ -15,8 +15,8 @@ df_train, df_test = motor_util.load_dataset()
 toc = time.perf_counter()
 print(f"Loaded dataset in {toc - tic:0.1f} seconds.")
 
-min_kb, max_kb = motor_util.compress_dataset(df_test, KB_COMPRESSION)
-min_examples, max_examples = motor_util.compress_dataset(df_train, EXAMPLE_COMPRESSION)
+kb = motor_util.compress_dataset(df_test, KB_COMPRESSION)
+examples = motor_util.compress_dataset(df_train, EXAMPLE_COMPRESSION)
 tuc = time.perf_counter()
 print(f"Compressed dataset in {tuc - toc:0.1f} seconds.")
 
@@ -27,17 +27,18 @@ number_of_examples = pac.sample_size(confidence, gamma)
 print(f"{number_of_examples} examples needed for a confidence of {confidence} and gamma of {gamma}.")
 query = z3_vars.get("pm") - z3_vars.get("ambient") > 0
 
+print(f"{len(kb)//2} observations and {len(examples)//2} examples.")
+
 tuc = time.perf_counter()
 matched_examples = pac.is_in_range(
-    min_examples.drop(['profile_id'], axis=1), max_examples.drop(['profile_id'], axis=1),
-    min_kb.drop(['profile_id'], axis=1), max_kb.drop(['profile_id'], axis=1))
+    examples.drop(['profile_id'], axis=1), kb.drop(['profile_id'], axis=1))
 
 plt.hist(matched_examples)
 plt.title(f"Example compression of {EXAMPLE_COMPRESSION} "
           f"and observation compression of {KB_COMPRESSION}")
 plt.xlabel("Number of matched examples")
 plt.ylabel("Count")
-plt.savefig(f"Ob{KB_COMPRESSION}Ex{EXAMPLE_COMPRESSION}.svg")
+plt.savefig(f"Ob{KB_COMPRESSION}Ex{EXAMPLE_COMPRESSION}.png")
 
 tac = time.perf_counter()
 

@@ -20,7 +20,7 @@ def compress_dataset(dataset, compression):
     Compress the dataset while respecting profile_id boundaries.
     :param dataset: The dataset to convert, in form of a pandas dataframe.
     :param compression: How many rows of the original dataset will be turned into one row.
-    :return: Two dataframes min and max, which contain the minimum and maximum values for each interval per row.
+    :return: A dataframe which contains the minimum and maximum values for each interval in an index hierarchy.
     """
     min_data = pd.DataFrame()
     max_data = pd.DataFrame()
@@ -34,7 +34,13 @@ def compress_dataset(dataset, compression):
         max_data = max_data.append(max_slice)
     min_data.reset_index(inplace=True, drop=True)
     max_data.reset_index(inplace=True, drop=True)
-    return min_data, max_data
+    # add column specifying whether row contains minimum or maximum values
+    min_data['bound'] = 'min'
+    max_data['bound'] = 'max'
+    # create dataframe that contains min and max dataframes with hierarchical index based on bound
+    data = pd.concat([min_data, max_data])
+    data.set_index(['bound', data.index], inplace=True)
+    return data
 
 
 def set_up_variables():

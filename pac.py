@@ -1,6 +1,7 @@
 from z3 import *
 import math
 import numpy as np
+import time
 
 
 class PAC:
@@ -39,13 +40,14 @@ class PAC:
             s.push()
         return state, (1 - failed / len(examples))
 
-    def create_inequalities(self, min_data, max_data):
+    def create_inequalities(self, data):
         """
         Turn minimum and maximum data into Z3 inequalities.
-        :param min_data: Dataframe where each row represents the minimum values of an instance.
-        :param max_data: Dataframe where each row represents the maximum values of an instance.
+        :param data: A dataframe containing the minimum and maximum values of an instance.
         :return: A list of Z3 formulas that are conjunctions of inequalities.
         """
+        min_data = data.xs('min')
+        max_data = data.xs('max')
         return [And(
             [self.z3_vars.get(col) >= min_data.at[row, col] for col in min_data.columns
              if not math.isnan(min_data.at[row, col])] +
@@ -84,19 +86,22 @@ def create_examples(dataset, compression=1):
     return mins, maxs
 
 
-def is_in_range(min_examples, max_examples, min_observations, max_observations):
+def is_in_range(examples, observations):
     """
     Check how many examples each observation is in range of.
-    :param min_examples: A dataframe containing the minimum bounds of each variable. Each row represents one example.
-    :param max_examples: A dataframe containing the maximum bounds of each variable. Each row represents one example.
-    :param min_observations: A dataframe with the minimum bounds of each variable. Each row represents one observation.
-    :param max_observations: A dataframe with the maximum bound sof each variable. Each row represents one observation.
-    :return: A list containing the number of examples each observation is in range of.
+    :param examples: A dataframe containing the minimum and maximum bounds of each variable.
+    :param observations: A dataframe with the minimum and maximum bounds of each variable.
+    :return: A series containing the number of examples each observation is in range of.
     """
     # The interval for the observation has to be within the example interval.
-    min_indices = min_observations.apply(find_min_indices, args=(min_examples,), axis=1)
-    max_indices = max_observations.apply(find_max_indices, args=(max_examples,), axis=1)
-    true_indices = [len(min_indices[i].intersection(max_indices[i])) for i in range(len(min_indices))]
+    min_examples = examples.xs('min')
+    max_examples = examples.xs('max')
+    min_observations = observations.xs('min')
+    max_observations = observations.xs('max')
+    min_indexes = min_observations.apply(find_min_indices, args=(min_examples,), axis=1)
+    max_indexes = max_observations.apply(find_max_indices, args=(max_examples,), axis=1)
+    true_indices = min_indexes.combine(max_indexes,
+                                       (lambda min_index, max_index: len(min_index.intersection(max_index))))
     return true_indices
 
 

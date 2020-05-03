@@ -18,34 +18,31 @@ toc = time.perf_counter()
 print(f"Loaded dataset in {toc - tic:0.1f} seconds.")
 
 # For knowledge base, each profile will create one min and one max
-min_kb, max_kb = motor_util.compress_dataset(df_train, KB_COMPRESSION)
-min_examples, max_examples = motor_util.compress_dataset(df_train, EXAMPLE_COMPRESSION)
+kb = motor_util.compress_dataset(df_train, KB_COMPRESSION)
+examples = motor_util.compress_dataset(df_train, EXAMPLE_COMPRESSION)
 tuc = time.perf_counter()
 print(f"Compressed dataset in {tuc - toc:0.1f} seconds.")
 
 query = z3_vars.get("i_d") * z3_vars.get("u_d") + z3_vars.get("i_q") * z3_vars.get("u_q") > 0
 validity = 0.8
 print(f"Validity set to {validity}.")
-validities = pd.DataFrame(columns=min_kb.profile_id.unique()[:10], index=MASKING_PROBABILITIES)
+validities = pd.DataFrame(columns=kb.profile_id.unique()[:10], index=MASKING_PROBABILITIES)
 
 # Do PAC decision procedure for each profile separately
-for profile_id in min_kb.profile_id.unique()[:10]:
+for profile_id in kb.profile_id.unique()[:10]:
     pac_object = pac.PAC(z3_vars)
-    mins = min_kb[min_kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
-    maxs = max_kb[max_kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
-    knowledge_base = pac_object.create_inequalities(mins, maxs)
+    current_kb = kb[kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
+    knowledge_base = pac_object.create_inequalities(current_kb)
     pac_object.knowledge_base = knowledge_base[0]
 
-    mins = min_examples[min_examples['profile_id'] == profile_id].drop(['profile_id'], axis=1)
-    maxs = max_examples[max_examples['profile_id'] == profile_id].drop(['profile_id'], axis=1)
-    print(f"Profile {profile_id} contains {len(mins)} examples.")
+    current_examples = examples[examples['profile_id'] == profile_id].drop(['profile_id'], axis=1)
+    print(f"Profile {profile_id} contains {len(current_examples)//2} examples.")
     for masking in MASKING_PROBABILITIES:
         tuc = time.perf_counter()
         print(f"Masking probability of {masking:0.1f}.")
 
-        mins_masked = pac.random_masking(mins, masking)
-        maxs_masked = pac.random_masking(maxs, masking)
-        examples = pac_object.create_inequalities(mins_masked, maxs_masked)
+        masked_examples = pac.random_masking(current_examples, masking)
+        examples = pac_object.create_inequalities(masked_examples)
         tec = time.perf_counter()
         decision, prop_valid = pac_object.decide_pac(examples, query, validity)
         validities.at[masking, profile_id] = prop_valid

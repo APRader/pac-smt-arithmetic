@@ -7,7 +7,7 @@ import time
 class PAC:
     def __init__(self, z3_vars, knowledge_base=None):
         if knowledge_base is None:
-            knowledge_base = []
+            knowledge_base = True
         self.z3_vars = z3_vars
         self.knowledge_base = knowledge_base
 

@@ -55,3 +55,6 @@ def set_up_variables():
                'stator_tooth': stator_tooth, 'stator_winding': stator_winding}
     set_option(rational_to_decimal=True)
     return z3_vars
+
+
+

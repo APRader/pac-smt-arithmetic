@@ -1,7 +1,9 @@
 from z3 import *
 import math
 import numpy as np
-import time
+import random
+import pandas as pd
+import operator
 
 
 class PAC:
@@ -54,6 +56,32 @@ class PAC:
             [self.z3_vars.get(col) <= max_data.at[row, col] for col in max_data.columns
              if not math.isnan(max_data.at[row, col])])
             for row in min_data.index]
+
+    def generate_linear_queries(self, no_of_queries, no_of_clauses, no_of_literals):
+        """
+        Generates random queries using the available object variables.
+        :param literals_per_clause:
+        :param no_of_queries:
+        :param no_of_literals: number of distinct literals appearing the query.
+        :return:
+        """
+        if no_of_literals > len(self.z3_vars):
+            raise ValueError("Number of literals must not exceed number of z3 variables of object.")
+        # specifying which literals and operators to choose from
+        allowed_literals = np.array(list(self.z3_vars.values()))
+        allowed_operators = [operator.lt, operator.gt, operator.le, operator.ge, operator.eq]
+        # randomly generating all constants, literals and operators
+        # for literals, make sure every row has unique values
+        literal_indexes = np.argpartition(np.random.rand(no_of_queries, len(allowed_literals)), no_of_literals - 1)
+        # take only no_of_literals of those indexes for each row
+        literals = allowed_literals[literal_indexes[:, :no_of_literals]]
+        constants = np.random.uniform(-1, 1, (no_of_queries, no_of_literals))
+        operators = np.random.choice(allowed_operators, (no_of_queries,))
+        numbers = np.random.uniform(-1, 1, (no_of_queries,))
+        # combining the parts into formulas
+        combined = (constants * literals).sum(axis=1)
+        queries = [operators[i](combined[i], numbers[i]) for i in range(no_of_queries)]
+        return queries
 
 
 def sample_size(confidence, gamma):

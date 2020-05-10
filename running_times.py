@@ -7,24 +7,8 @@ import matplotlib.pyplot as plt
 KB_COMPRESSION = 1000000  # compression factor for knowledge base, larger than amount of data points in any profile
 EXAMPLE_COMPRESSION = 100
 VALIDITY = 0.5
+NO_OF_QUERIES = 10
 z3_vars = motor_util.set_up_variables()
-
-# columns: number of variables, rows: different combinations of variables
-queries = [z3_vars.get("ambient") > 0, z3_vars.get("ambient") + z3_vars.get("coolant") > 0,
-           z3_vars.get("ambient") + z3_vars.get("coolant") - z3_vars.get("u_d") > 0,
-           z3_vars.get("ambient") + z3_vars.get("coolant") - z3_vars.get("u_d") + z3_vars.get("u_q") > 0,
-           z3_vars.get("ambient") + z3_vars.get("coolant") - z3_vars.get("u_d") + z3_vars.get("u_q")
-           - z3_vars.get("motor_speed") > 0,
-           z3_vars.get("ambient") + z3_vars.get("coolant") - z3_vars.get("u_d") + z3_vars.get("u_q")
-           - z3_vars.get("motor_speed") + z3_vars.get("torque") > 0,
-           z3_vars.get("ambient") + z3_vars.get("coolant") - z3_vars.get("u_d") + z3_vars.get("u_q")
-           - z3_vars.get("motor_speed") + z3_vars.get("torque") - z3_vars.get("i_d") > 0,
-           z3_vars.get("ambient") + z3_vars.get("coolant") - z3_vars.get("u_d") + z3_vars.get("u_q")
-           - z3_vars.get("motor_speed") + z3_vars.get("torque") - z3_vars.get("i_d") + z3_vars.get("i_q") > 0,
-           z3_vars.get("ambient") + z3_vars.get("coolant") - z3_vars.get("u_d") + z3_vars.get("u_q")
-           - z3_vars.get("motor_speed") + z3_vars.get("torque") - z3_vars.get("i_d") + z3_vars.get("i_q")
-           - z3_vars.get("pm") > 0
-           ]
 
 tic = time.perf_counter()
 
@@ -41,20 +25,22 @@ print(f"Compressed dataset in {tuc - toc:0.1f} seconds.")
 
 pac_object = pac.PAC(z3_vars)
 examples = pac_object.create_inequalities(examples.drop(['profile_id'], axis=1))
-tuc = time.perf_counter()
-print(f"Created inequalities in {tuc - toc:0.1f} seconds.")
+tac = time.perf_counter()
+print(f"Created {len(examples)} inequalities in {tac - tuc:0.1f} seconds.")
 
 running_times = []
-for query in queries:
-    tuc = time.perf_counter()
-    decision, prop_valid = pac_object.decide_pac(examples, query, VALIDITY)
-    tac = time.perf_counter()
-    running_times.append(tac - tuc)
-    print(f"PAC decided to {decision} since {prop_valid:0.3f} of the examples were valid "
-          f"after thinking for {tac - tuc:0.1f} seconds.")
-
+for i in range(1, len(z3_vars) + 1):
+    queries = pac_object.generate_linear_queries(NO_OF_QUERIES, 1, i)
+    current_times = []
+    for query in queries:
+        tac = time.perf_counter()
+        decision, prop_valid = pac_object.decide_pac(examples, query, VALIDITY)
+        tec = time.perf_counter()
+        current_times.append(tec - tac)
+    print(f"Processed {NO_OF_QUERIES} queries for {i} variables in {sum(current_times):0.1f} seconds")
+    running_times.append(sum(current_times) / len(current_times))
 plt.plot(range(1, len(running_times) + 1), running_times)
-plt.xlabel('Number of arguments')
+plt.xlabel('Number of variables')
 plt.ylabel('Running time (s)')
 plt.title(f"{len(examples)} examples")
 plt.savefig(f"running_times.png")

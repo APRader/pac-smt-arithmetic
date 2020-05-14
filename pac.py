@@ -57,13 +57,12 @@ class PAC:
              if not math.isnan(max_data.at[row, col])])
             for row in min_data.index]
 
-    def generate_linear_queries(self, no_of_queries, no_of_clauses, no_of_literals):
+    def generate_linear_queries(self, no_of_queries, no_of_literals):
         """
-        Generates random queries using the available object variables.
-        :param literals_per_clause:
-        :param no_of_queries:
+        Generates random linear queries of the form a_1x_1 + a_2x_x + ... + a_nx_n >/>=/</<=/= b.
+        :param no_of_queries: number of queries to be generated.
         :param no_of_literals: number of distinct literals appearing the query.
-        :return:
+        :return: a list of Z3 queries.
         """
         if no_of_literals > len(self.z3_vars):
             raise ValueError("Number of literals must not exceed number of z3 variables of object.")

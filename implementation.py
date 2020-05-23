@@ -1,6 +1,6 @@
 import motor_util
 import time
-import pac
+import paclearner
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -30,7 +30,7 @@ validities = pd.DataFrame(columns=kb.profile_id.unique()[:10], index=MASKING_PRO
 
 # Do PAC decision procedure for each profile separately
 for profile_id in kb.profile_id.unique()[:10]:
-    pac_object = pac.PAC(z3_vars)
+    pac_object = paclearner.PACLearner(z3_vars)
     current_kb = kb[kb['profile_id'] == profile_id].drop(['profile_id'], axis=1)
     knowledge_base = pac_object.create_inequalities(current_kb)
     pac_object.knowledge_base = knowledge_base[0]
@@ -41,7 +41,7 @@ for profile_id in kb.profile_id.unique()[:10]:
         tuc = time.perf_counter()
         print(f"Masking probability of {masking:0.1f}.")
 
-        masked_examples = pac.random_masking(current_examples, masking)
+        masked_examples = paclearner.random_masking(current_examples, masking)
         examples = pac_object.create_inequalities(masked_examples)
         tec = time.perf_counter()
         decision, prop_valid = pac_object.decide_pac(examples, query, validity)

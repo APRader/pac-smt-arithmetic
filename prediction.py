@@ -1,6 +1,6 @@
 import time
 import motor_util
-import pac
+import paclearner
 import matplotlib.pyplot as plt
 
 KB_COMPRESSION = 1  # compression factor for knowledge base, represents current observations
@@ -23,14 +23,14 @@ print(f"Compressed dataset in {tuc - toc:0.1f} seconds.")
 confidence = 0.9
 gamma = 0.05
 validity = 0.75
-number_of_examples = pac.sample_size(confidence, gamma)
+number_of_examples = paclearner.sample_size(confidence, gamma)
 print(f"{number_of_examples} examples needed for a confidence of {confidence} and gamma of {gamma}.")
 query = z3_vars.get("pm") - z3_vars.get("ambient") > 0
 
 print(f"{len(kb)//2} observations and {len(examples)//2} examples.")
 
 tuc = time.perf_counter()
-matched_examples = pac.is_in_range(
+matched_examples = paclearner.is_in_range(
     examples.drop(['profile_id'], axis=1), kb.drop(['profile_id'], axis=1))
 
 plt.hist(matched_examples)

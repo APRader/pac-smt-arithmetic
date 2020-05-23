@@ -6,7 +6,7 @@ import pandas as pd
 import operator
 
 
-class PAC:
+class PACLearner:
     def __init__(self, z3_vars, knowledge_base=None):
         if knowledge_base is None:
             knowledge_base = True
@@ -34,7 +34,9 @@ class PAC:
         for example in examples:
             s.add(example)
             # if sat, then the entailment is rejected
+            print(f"Solver: {s}")
             if s.check() == sat:
+                print(f"Model: {s.model()}")
                 failed += 1
                 if failed > b:
                     state = 'Reject'

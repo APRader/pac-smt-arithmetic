@@ -1,5 +1,5 @@
 from z3 import *
-import pac
+import paclearner
 import numpy as np
 
 NO_OF_EXAMPLES = 10
@@ -26,7 +26,7 @@ f.close()
 
 knowledge_base = [And(-1 <= variable, variable <= 1) for variable in variables if is_real(variable)]
 
-pac_learner = pac.PAC(variables, knowledge_base)
+pac_learner = paclearner.PACLearner(variables, knowledge_base)
 
 no_of_real_variables = sum(list(map(is_real, variables)))
 no_of_bool_variables = sum(list(map(is_bool, variables)))

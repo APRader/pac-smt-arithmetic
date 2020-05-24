@@ -40,8 +40,23 @@ for example in examples:
     true_fs.append(w_star)
     true_cs.append(c_star)
     assignments = And([variables[i] == example[i] for i in range(n)])
-    state, _ = learner.decide_pac([assignments], f <= 1.5, 1)
-    estimated_fs.append(state)
+    rejects = True
+    f_val = 0.5
+    while rejects:
+        f_val *= 2
+        state, _ = learner.decide_pac([assignments], f <= f_val, 1)
+        if state == "Accept":
+            rejects = False
+    U = f_val
+    L = f_val/2
+    accuracy = 3
+    for i in range(accuracy):
+        state, _ = learner.decide_pac([assignments], f <= (U+L)/2, 1)
+        if state == "Accept":
+            U = (U+L)/2
+        else:
+            L = (U+L)/2
+    estimated_fs.append(U)
 
 
 print(f"Constraints: {Psi}")

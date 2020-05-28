@@ -1,6 +1,6 @@
 import motor_util
 import time
-import paclearner
+import pac
 import matplotlib.pyplot as plt
 
 KB_COMPRESSION = 1000000  # compression factor for knowledge base, larger than amount of data points in any profile
@@ -22,7 +22,7 @@ examples = motor_util.compress_dataset(df_train, EXAMPLE_COMPRESSION)
 tuc = time.perf_counter()
 print(f"Compressed dataset in {tuc - toc:0.1f} seconds.")
 
-pac_object = paclearner.PACLearner(z3_vars)
+pac_object = pac.PACLearner(z3_vars)
 examples = pac_object.create_inequalities(examples.drop(['profile_id'], axis=1))
 tac = time.perf_counter()
 print(f"Created {len(examples)} inequalities in {tac - tuc:0.1f} seconds.")

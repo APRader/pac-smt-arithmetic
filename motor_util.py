@@ -1,5 +1,5 @@
 import pandas as pd
-import paclearner
+import pac
 from z3 import *
 
 
@@ -26,7 +26,7 @@ def compress_dataset(dataset, compression):
     max_data = pd.DataFrame()
     for profile_id in dataset.profile_id.unique():
         data_slice = dataset[dataset['profile_id'] == profile_id]
-        min_slice, max_slice = paclearner.create_examples(data_slice.drop(['profile_id'], axis=1), compression)
+        min_slice, max_slice = pac.create_examples(data_slice.drop(['profile_id'], axis=1), compression)
         # add profile_id column back
         min_slice['profile_id'] = profile_id
         max_slice['profile_id'] = profile_id

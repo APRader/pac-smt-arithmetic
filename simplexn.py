@@ -1,7 +1,8 @@
 # Code adapted from https://github.com/samuelkolb/incal/releases
+from z3 import *
+import pac
 import string
-from pysmt.shortcuts import *
-from incalp.problem import *
+from incalp.problem import Domain, Problem
 import math
 
 
@@ -20,26 +21,50 @@ def simplexn(dimension):
 
     for i in letters[:dimension]:
         variables.append(i)
-        var_types[i] = REAL
+        var_types[i] = Real(i)
         var_domains[i] = (0, 1)
 
-    domain = Domain(variables, var_types, var_domains)
-    s = [Symbol(s, REAL) for s in domain.variables]
-    constraints.append(Plus(s) <= normalisation(2.7))
+    s = [var_types[i] for i in variables]
+    constraints.append(sum(s) <= normalisation(2.7))
+    print(constraints)
 
     for a in letters[:dimension]:
         count += 1
-        x = domain.get_symbol(a)
+        x = var_types[a]
         for b in letters[count:dimension]:
-            y = domain.get_symbol(b)
+            y = var_types[b]
 
             constraints.append(
                 x * normalisation(1 / math.tan(math.pi / 12)) - y * normalisation(math.tan(math.pi / 12)) >= 0)
             constraints.append(y * normalisation((1 / math.tan(math.pi / 12))) - x * (math.tan(math.pi / 12)) >= 0)
 
-    theory = And(i for i in constraints)
-    return Problem(domain, theory, "simplexn")
+    theory = And(constraints)
+    return theory, var_types, var_domains
+
+def generate_models(theory, n):
+    s = Solver()
+    s.add(theory)
+    models = []
+    while s.check() == sat and len(models) < n:
+        model = s.model()
+        models.append(model)
+        block = []
+        # add constraint that blocks the same model from being returned again
+        for d in model:
+            c = d()
+            block.append(c != model[d])
+        s.add(Or(block))
+    return models
+
+set_option(rational_to_decimal=True)
+
+theory, z3_vars, domain = simplexn(5)
+
+print(theory)
+
+models = generate_models(theory, 30)
+
+print(models)
 
 
-problem = simplexn(5)
-print(export_problem(problem))
+

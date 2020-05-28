@@ -1,6 +1,6 @@
 from z3 import *
 import itertools
-import paclearner
+import pac
 
 A, B, C = Bools('A B C')
 variables = [A, B, C]
@@ -22,7 +22,7 @@ f = Sum([weight_vars[i]*Psi[i] for i in range(n)])
 for example in examples:
     w_star = 0
     c_star = True
-    learner = paclearner.PACLearner(weight_vars, kb)
+    learner = pac.PACLearner(weight_vars, kb)
     s = Solver()
     s.add(A == example[0], B == example[1], C == example[2])
     s.push()

@@ -61,7 +61,7 @@ class PACLearner:
 
     def generate_linear_queries(self, no_of_queries, no_of_literals):
         """
-        Generates random linear queries of the form a_1x_1 + a_2x_x + ... + a_nx_n >/>=/</<=/= b.
+        Generates random linear queries of the form a_1x_1 + a_2x_x + ... + a_nx_n >/>=/</<=/== b.
         :param no_of_queries: number of queries to be generated.
         :param no_of_literals: number of distinct literals appearing the query.
         :return: a list of Z3 queries.

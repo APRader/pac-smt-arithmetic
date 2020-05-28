@@ -6,7 +6,7 @@ A, B, C = Bools('A B C')
 variables = [A, B, C]
 Psi = [A, Or(B, Not(C)), Or(Not(A), Not(B), Not(C))]  # all constraints
 cs = [0, 0, 1]  # hard constraints
-ws = [1, 0.5, 0]  # weights of soft constraints
+ws = [0.1, 0.5, 0]  # weights of soft constraints
 n = len(Psi)
 assert (n == len(cs))
 assert (n == len(ws))

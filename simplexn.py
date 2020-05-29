@@ -4,6 +4,7 @@ import pac
 import string
 from incalp.problem import Domain, Problem
 import math
+import time
 
 
 def simplexn(dimension):
@@ -26,7 +27,6 @@ def simplexn(dimension):
 
     s = [var_types[i] for i in variables]
     constraints.append(sum(s) <= normalisation(2.7))
-    print(constraints)
 
     for a in letters[:dimension]:
         count += 1
@@ -41,6 +41,7 @@ def simplexn(dimension):
     theory = And(constraints)
     return theory, var_types, var_domains
 
+
 def generate_models(theory, n):
     s = Solver()
     s.add(theory)
@@ -52,19 +53,24 @@ def generate_models(theory, n):
         # add constraint that blocks the same model from being returned again
         for d in model:
             c = d()
-            block.append(c != model[d])
+            block.append(Or(c <= model[d] - 0.01, c >= model[d] + 0.01))
         s.add(Or(block))
     return models
+
 
 set_option(rational_to_decimal=True)
 
 theory, z3_vars, domain = simplexn(5)
 
-print(theory)
+print(f"Theory: {theory}")
 
-models = generate_models(theory, 30)
+tic = time.perf_counter()
+models = generate_models(theory, 10)
+toc = time.perf_counter()
 
-print(models)
+print(f"{len(models)} models generated in {toc - tic:0.1f} seconds.")
 
+learner = pac.PACLearner(z3_vars, theory)
 
+examples = [And([var() == model[var] for var in model]) for model in models]
 

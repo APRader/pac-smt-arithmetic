@@ -34,9 +34,9 @@ class PACLearner:
         for example in examples:
             s.add(example)
             # if sat, then the entailment is rejected
-            print(f"Solver: {s}")
+            #print(f"Solver: {s}")
             if s.check() == sat:
-                print(f"Model: {s.model()}")
+                #print(f"Model: {s.model()}")
                 failed += 1
                 if failed > b:
                     state = 'Reject'

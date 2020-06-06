@@ -80,7 +80,7 @@ def import_domain(flat):
 
 def export_problem(problem, to_str=True):
     flat = {
-        "domain": export_domain(problem.domain, to_str=False),
+        "domain": export_domain(problem.domains, to_str=False),
         "theory": parse.smt_to_nested(problem.theory),
         "name": problem.name,
     }

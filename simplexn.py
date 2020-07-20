@@ -10,8 +10,8 @@ from random import gauss
 from sklearn import linear_model
 import matplotlib.pyplot as plt
 
-DIMENSION = 5
-NUMBER_OF_MODELS = 50
+DIMENSIONS = 3
+NUM_MODELS = 1000
 
 
 def simplexn(dimension):
@@ -62,7 +62,7 @@ def generate_models(theory, n, z3_vars, var_domains):
         # add constraint that blocks the same model from being returned again
         for d in model:
             c = d()
-            block.append(Or(c <= model[d] - 0.1, c >= model[d] + 0.1))
+            block.append(Or(c <= model[d] - 0.01, c >= model[d] + 0.01))
         s.add(Or(block))
     return models
 
@@ -91,10 +91,10 @@ def abline(slope, intercept):
 
 set_option(rational_to_decimal=True)
 
-theory, z3_vars, domains, variables = simplexn(DIMENSION)
+theory, z3_vars, domains, variables = simplexn(DIMENSIONS)
 
 tic = time.perf_counter()
-models = generate_models(theory, NUMBER_OF_MODELS, z3_vars, domains)
+models = generate_models(theory, NUM_MODELS, z3_vars, domains)
 toc = time.perf_counter()
 
 print(f"{len(models)} models generated in {toc - tic:0.1f} seconds.")
@@ -102,54 +102,58 @@ print(f"{len(models)} models generated in {toc - tic:0.1f} seconds.")
 learner = pac.PACLearner(z3_vars, theory)
 
 examples = [And([var() == model[var] for var in model]) for model in models]
-#print(examples)
+# print(examples)
 
-random_direction = make_rand_vector(DIMENSION)
+random_direction = make_rand_vector(DIMENSIONS)
 
 points = np.array([[float(model[var].numerator_as_long()) / float(model[var].denominator_as_long()) for var in model]
                    for model in models])
-#print(points)
-sigm = np.vectorize(sigmoid)
 
-fs = sigm(points.dot(random_direction))
+# sigm = np.vectorize(sigmoid)
+# fs = sigm(points.dot(random_direction))
+
+#
+fs = points.dot(random_direction)
+points = points + np.random.normal(0, 0.1, points.shape)
 
 # Create linear regression object
 regr = linear_model.LinearRegression()
 regr.fit(points, fs)
 
-if DIMENSION == 1:
+if DIMENSIONS == 1:
     # Plot outputs
-    plt.scatter(points, fs,  color='black')
+    plt.scatter(points, fs, color='black')
     abline(regr.coef_[0], regr.intercept_)
     plt.ylabel("Objective value")
     plt.xlabel("Points in simplex")
     plt.show()
 
-estimated_f = sum([regr.coef_[i]*z3_vars[variables[i]] for i in range(DIMENSION)]) + regr.intercept_
+estimated_f = sum([regr.coef_[i] * z3_vars[variables[i]] for i in range(DIMENSIONS)]) + regr.intercept_
 print(f"f vector: {random_direction}")
 print(f"Estimated coefficients: {regr.coef_}")
 
-estimated_fs = []
+f_val = 0.1
+rejects = True
+while rejects:
+    f_val *= 2
+    state, _ = learner.decide_pac(examples, estimated_f <= f_val, 1)
+    if state == "Accept":
+        rejects = False
+U = f_val
+L = f_val / 2
+accuracy = 3
+for i in range(accuracy):
+    state, _ = learner.decide_pac(examples, estimated_f <= (U + L) / 2, 1)
+    if state == "Accept":
+        U = (U + L) / 2
+    else:
+        L = (U + L) / 2
+estimated_f = U
 
-for example in examples:
-    f_val = 0.1
-    rejects = True
-    while rejects:
-        f_val *= 2
-        state, _ = learner.decide_pac([example], estimated_f <= f_val, 1)
-        if state == "Accept":
-            rejects = False
-    U = f_val
-    L = f_val/2
-    accuracy = 3
-    for i in range(accuracy):
-        state, _ = learner.decide_pac([example], estimated_f <= (U+L)/2, 1)
-        if state == "Accept":
-            U = (U+L)/2
-        else:
-            L = (U+L)/2
-    estimated_fs.append(U)
+#print(f"Real fs: {fs}")
+print(f"PAC-estimated highest f: {estimated_f}")
+print(f"Difference: {max(fs) - estimated_f}")
+tac = time.perf_counter()
 
-print(f"Real fs: {fs}")
-print(f"PAC-estimated fs: {estimated_fs}")
-print(f"Difference: {fs - estimated_fs}")
+print(f"PAC took {tac - toc:0.1f} seconds for a simplexn with {DIMENSIONS} dimensions "
+          f"and {NUM_MODELS} sample points")

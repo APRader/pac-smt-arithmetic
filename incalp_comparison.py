@@ -130,7 +130,7 @@ def make_rand_vector(dims):
 
 def main():
     sample_sizes = [50, 100, 200, 300, 400, 500]
-    num_runs = 2
+    num_runs = 10
     log_path = "output/incalp_comparison_log.txt"
     incalp_runtimes = np.zeros((3, len(sample_sizes), num_runs))
     pac_runtimes = np.zeros((3, len(sample_sizes), num_runs))
@@ -203,7 +203,7 @@ def main():
     plt.setp(axs[0], ylabel='Time (s)')
     axs[0].legend()
     fig.suptitle(problem.name)
-    plot_file = f"output/{problem.name}-{str(time.perf_counter())}.png"
+    plot_file = f"output/{problem.name}-{time.time():.0f}.png"
     plt.savefig(plot_file)
 
     print(f"Finished! The plot can be found at {plot_file}.")

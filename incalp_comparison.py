@@ -10,6 +10,7 @@ from incalp.incremental_learner import RandomViolationsStrategy
 import random
 from incalp.lp_problems import simplexn, cuben
 from incalp.smt_check import SmtChecker
+import matplotlib.pyplot as plt
 
 
 def get_samples(problem, num_pos_samples, num_neg_samples):
@@ -65,7 +66,7 @@ def create_objective_function(problem, true_samples, dimensions):
     random_direction = np.abs(make_rand_vector(dimensions))
     true_points = np.array([list(sample[0].values()) for sample in true_samples])
     fs = true_points.dot(random_direction)
-    noisy_fs = fs + np.random.normal(0, 0.1, fs.shape)
+    noisy_fs = fs + np.random.normal(0, 0.05, fs.shape)
     regr = linear_model.LinearRegression()
     regr.fit(true_points, noisy_fs)
 
@@ -105,7 +106,7 @@ def run_pac(samples, estimated_f):
             rejects = False
     U = f_val
     L = f_val / 2
-    accuracy = 1000
+    accuracy = 64
     for i in range(accuracy):
         ratio_true = pac_learning(samples, estimated_f <= (U + L) / 2)
         if ratio_true >= 1:
@@ -128,52 +129,87 @@ def make_rand_vector(dims):
 
 
 def main():
-    incalp_runtimes = np.zeros((3, 6))
-    pac_runtimes = np.zeros((3, 6))
+    sample_sizes = [50, 100, 200, 300, 400, 500]
+    num_runs = 2
+    log_path = "output/incalp_comparison_log.txt"
+    incalp_runtimes = np.zeros((3, len(sample_sizes), num_runs))
+    pac_runtimes = np.zeros((3, len(sample_sizes), num_runs))
 
-    for dimensions in [2, 3, 4]:
-        log_file = open("logs/incal_comparison_log.txt", "a")
-        log_file.write(f"DIMENSIONS: {dimensions}\n")
-        log_file.close()
-
-        problem = simplexn(dimensions)
-        # Number of constraints needed to represent SimplexN
-        num_constraints = dimensions * (dimensions - 1) + 1
-
-        # We need at most 500 samples
-        all_true_samples, all_false_samples = get_samples(problem, 250, 250)
-
-        for i, sample_size in enumerate([50, 100, 200, 300, 400, 500]):
-            log_file = open("logs/incal_comparison_log.txt", "a")
-            log_file.write(f"SAMPLES: {sample_size}\n")
+    for run in range(num_runs):
+        # Multiple independent runs
+        print(f"Starting run {run + 1} out of {num_runs}.")
+        for dimensions in [2, 3, 4]:
+            log_file = open(log_path, "a")
+            log_file.write(f"DIMENSIONS: {dimensions}\n")
             log_file.close()
 
-            true_samples = all_true_samples[:int(sample_size / 2)]
-            false_samples = all_false_samples[:int(sample_size / 2)]
+            problem = simplexn(dimensions)
+            # Number of constraints needed to represent SimplexN
+            num_constraints = dimensions * (dimensions - 1) + 1
 
-            tic = time.perf_counter()
-            run_incalp(problem.domain, true_samples + false_samples, num_constraints)
-            toc = time.perf_counter()
-            incalp_runtimes[dimensions - 2, i] = toc - tic
+            # problem = cuben(dimensions)
+            # Number of constraints needed to represent CubeN
+            # num_constraints = 2 * dimensions
 
-            log_file = open("logs/incal_comparison_log.txt", "a")
-            log_file.write(f"IncalP took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions and {sample_size} sample points.\n")
-            log_file.close()
+            # We need at most 500 samples
+            all_true_samples, all_false_samples = get_samples(problem, 50, 50)
 
-            fs, noisy_fs, estimated_f = create_objective_function(problem, true_samples, dimensions)
-            tic = time.perf_counter()
-            pac_estimated_f = run_pac(true_samples, estimated_f)
-            toc = time.perf_counter()
-            pac_runtimes[dimensions - 2, i] = toc - tic
+            for i, sample_size in enumerate(sample_sizes):
+                log_file = open(log_path, "a")
+                log_file.write(f"SAMPLES: {sample_size}\n")
+                log_file.close()
 
-            log_file = open("logs/incal_comparison_log.txt", "a")
-            log_file.write(f"PAC took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions and {sample_size / 2} positive sample points.\n")
-            log_file.close()
+                true_samples = all_true_samples[:int(sample_size / 2)]
+                false_samples = all_false_samples[:int(sample_size / 2)]
 
+                tic = time.perf_counter()
+                run_incalp(problem.domain, true_samples + false_samples, num_constraints)
+                toc = time.perf_counter()
+                incalp_runtimes[dimensions - 2, i, run] = toc - tic
+
+                log_file = open(log_path, "a")
+                log_file.write(
+                    f"IncalP took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions and {sample_size} sample points.\n")
+                log_file.close()
+
+                fs, noisy_fs, estimated_f = create_objective_function(problem, true_samples, dimensions)
+                tic = time.perf_counter()
+                pac_estimated_f = run_pac(true_samples, estimated_f)
+                toc = time.perf_counter()
+                pac_runtimes[dimensions - 2, i, run] = toc - tic
+
+                log_file = open(log_path, "a")
+                log_file.write(
+                    f"PAC took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions and {sample_size / 2} positive sample points.\n")
+                log_file.close()
+
+    mean_incalp_runtimes = np.mean(incalp_runtimes, axis=2)
+    mean_pac_runtimes = np.mean(pac_runtimes, axis=2)
+    std_incalp_runtimes = np.std(incalp_runtimes, axis=2)
+    std_pac_runtimes = np.std(pac_runtimes, axis=2)
+
+    fig, axs = plt.subplots(1, 3, sharey='all', constrained_layout=True)
+    for i, ax in enumerate(axs):
+        y_incalp = mean_incalp_runtimes[i, :]
+        y_pac = mean_pac_runtimes[i, :]
+        y_err_incalp = std_incalp_runtimes[i, :]
+        y_err_pac = std_pac_runtimes[i, :]
+        ax.plot(sample_sizes, y_incalp, label='IncalP')
+        ax.plot(sample_sizes, y_pac, label='PAC')
+        ax.fill_between(sample_sizes, y_incalp - y_err_incalp, y_incalp + y_err_incalp, alpha=0.5)
+        ax.fill_between(sample_sizes, y_pac - y_err_pac, y_pac + y_err_pac, alpha=0.5)
+        ax.title.set_text(f"n: {i + 2}")
+        ax.set_xlabel("Sample size")
+    plt.setp(axs[0], ylabel='Time (s)')
+    axs[0].legend()
+    fig.suptitle(problem.name)
+    plot_file = f"output/{problem.name}-{str(time.perf_counter())}.png"
+    plt.savefig(plot_file)
+
+    print(f"Finished! The plot can be found at {plot_file}.")
 
 if __name__ == "__main__":
     main()
-
 
 """
 def generate_models(theory, n, z3_vars, var_domains):

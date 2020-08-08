@@ -8,9 +8,10 @@ from sklearn import linear_model
 from incalp.incalpsmt import LPLearner
 from incalp.incremental_learner import RandomViolationsStrategy
 import random
-from incalp.lp_problems import simplexn, cuben
+from incalp.lp_problems import simplexn, cuben, pollutionreduction, police
 from incalp.smt_check import SmtChecker
 import matplotlib.pyplot as plt
+import sys
 
 
 def get_samples(problem, num_pos_samples, num_neg_samples):
@@ -61,19 +62,28 @@ def create_objective_function(problem, true_samples, dimensions):
     :param problem: Problem object.
     :param true_samples: True samples.
     :param dimensions: Number of dimensions.
-    :return:
+    :return: The objective function as a formula.
     """
-    random_direction = np.abs(make_rand_vector(dimensions))
-    true_points = np.array([list(sample[0].values()) for sample in true_samples])
-    fs = true_points.dot(random_direction)
-    noisy_fs = fs + np.random.normal(0, 0.05, fs.shape)
-    regr = linear_model.LinearRegression()
-    regr.fit(true_points, noisy_fs)
-
     variables = problem.domain.variables
-    estimated_f = sum([regr.coef_[i].item() * problem.domain.get_symbol(variables[i]) for i in
-                       range(dimensions)]) + regr.intercept_.item()
-    return fs, noisy_fs, estimated_f
+    if problem.name == "simplexn" or problem.name == "cuben":
+        # We create a random objective function
+        random_direction = np.abs(make_rand_vector(dimensions))
+        true_points = np.array([list(sample[0].values()) for sample in true_samples])
+        fs = true_points.dot(random_direction)
+        noisy_fs = fs + np.random.normal(0, 0.05, fs.shape)
+        regr = linear_model.LinearRegression()
+        regr.fit(true_points, noisy_fs)
+
+        estimated_f = sum([regr.coef_[i].item() * problem.domain.get_symbol(variables[i]) for i in
+                           range(dimensions)]) + regr.intercept_.item()
+    elif problem.name == "pollution":
+        coefficients = np.array([8, 10, 7, 6, 11, 9])
+        variable_symbols = np.array([problem.domain.get_symbol(variable) for variable in variables])
+        estimated_f = np.dot(coefficients, variable_symbols)
+    elif problem.name == "police":
+        estimated_f = sum([problem.domain.get_symbol(variable) for variable in variables])
+
+    return estimated_f
 
 
 def pac_learning(samples, query):
@@ -90,30 +100,51 @@ def pac_learning(samples, query):
     return num_true_samples / len(samples)
 
 
-def run_pac(samples, estimated_f):
+def run_pac(samples, estimated_f, goal="maximise"):
     """
     Run PAC with binary search.
     :param samples: Positive samples.
     :param estimated_f: SMT formula for the estimated objective function.
+    :param goal: Whether the goal is to maximise or minimise the objective function.
     :return: The estimated highest value of the objective function.
     """
-    f_val = 0.1
-    rejects = True
-    while rejects:
-        f_val *= 2
-        ratio_true = pac_learning(samples, estimated_f <= f_val)
-        if ratio_true >= 1:
-            rejects = False
-    U = f_val
-    L = f_val / 2
-    accuracy = 64
-    for i in range(accuracy):
-        ratio_true = pac_learning(samples, estimated_f <= (U + L) / 2)
-        if ratio_true >= 1:
-            U = (U + L) / 2
-        else:
-            L = (U + L) / 2
-    pac_estimated_f = U
+    if goal == "maximise":
+        f_val = 0.1
+        rejects = True
+        while rejects:
+            f_val *= 2
+            ratio_true = pac_learning(samples, estimated_f <= f_val)
+            if ratio_true >= 1:
+                rejects = False
+        U = f_val
+        L = f_val / 2
+        accuracy = 64
+        for i in range(accuracy):
+            ratio_true = pac_learning(samples, estimated_f <= (U + L) / 2)
+            if ratio_true >= 1:
+                U = (U + L) / 2
+            else:
+                L = (U + L) / 2
+        pac_estimated_f = U
+    elif goal == "minimise":
+        f_val = 100
+        rejects = True
+        while rejects:
+            f_val /= 2
+            ratio_true = pac_learning(samples, estimated_f >= f_val)
+            if ratio_true >= 1:
+                rejects = False
+        U = f_val * 2
+        L = f_val
+        accuracy = 64
+        for i in range(accuracy):
+            ratio_true = pac_learning(samples, estimated_f >= (U + L) / 2)
+            if ratio_true >= 1:
+                L = (U + L) / 2
+            else:
+                U = (U + L) / 2
+        pac_estimated_f = L
+
     return pac_estimated_f
 
 
@@ -129,30 +160,58 @@ def make_rand_vector(dims):
 
 
 def main():
+
+    if not len(sys.argv) == 2:
+        print("The command requires exactly one argument. Please choose between simplexn, cuben, pollution or police.")
+        sys.exit()
+    else:
+        problem_type = sys.argv[1]
+
+    if problem_type == "simplexn" or problem_type == "cuben":
+        all_dimensions = [2, 3, 4]
+    elif problem_type == "pollution":
+        # Pollution does not have different dimensions, so we just have this one
+        all_dimensions = [2]
+    elif problem_type == "police":
+        all_dimensions = [2]
+    else:
+        print("Wrong argument given. Please provide either simplexn, cuben, pollution or police")
+        sys.exit()
+
     sample_sizes = [50, 100, 200, 300, 400, 500]
     num_runs = 10
     log_path = "output/incalp_comparison_log.txt"
-    incalp_runtimes = np.zeros((3, len(sample_sizes), num_runs))
-    pac_runtimes = np.zeros((3, len(sample_sizes), num_runs))
+    incalp_runtimes = np.zeros((len(all_dimensions), len(sample_sizes), num_runs))
+    pac_runtimes = np.zeros((len(all_dimensions), len(sample_sizes), num_runs))
 
     for run in range(num_runs):
         # Multiple independent runs
         print(f"Starting run {run + 1} out of {num_runs}.")
-        for dimensions in [2, 3, 4]:
+
+        for dimensions in all_dimensions:
             log_file = open(log_path, "a")
             log_file.write(f"DIMENSIONS: {dimensions}\n")
             log_file.close()
 
-            problem = simplexn(dimensions)
-            # Number of constraints needed to represent SimplexN
-            num_constraints = dimensions * (dimensions - 1) + 1
-
-            # problem = cuben(dimensions)
-            # Number of constraints needed to represent CubeN
-            # num_constraints = 2 * dimensions
+            if problem_type == "simplexn":
+                problem = simplexn(dimensions)
+                num_constraints = dimensions * (dimensions - 1) + 1
+                pac_goal = "maximise"
+            elif problem_type == "cuben":
+                problem = cuben(dimensions)
+                num_constraints = 2 * dimensions
+                pac_goal = "maximise"
+            elif problem_type == "pollution":
+                problem = pollutionreduction()
+                num_constraints = 3
+                pac_goal = "minimise"
+            elif problem_type == "police":
+                problem = police()
+                num_constraints = 10
+                pac_goal = "minimise"
 
             # We need at most 500 samples
-            all_true_samples, all_false_samples = get_samples(problem, 50, 50)
+            all_true_samples, all_false_samples = get_samples(problem, 250, 250)
 
             for i, sample_size in enumerate(sample_sizes):
                 log_file = open(log_path, "a")
@@ -169,18 +228,20 @@ def main():
 
                 log_file = open(log_path, "a")
                 log_file.write(
-                    f"IncalP took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions and {sample_size} sample points.\n")
+                    f"IncalP took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions " 
+                    f"and {sample_size} sample points.\n")
                 log_file.close()
 
-                fs, noisy_fs, estimated_f = create_objective_function(problem, true_samples, dimensions)
+                estimated_f = create_objective_function(problem, true_samples, dimensions)
                 tic = time.perf_counter()
-                pac_estimated_f = run_pac(true_samples, estimated_f)
+                pac_estimated_f = run_pac(true_samples, estimated_f, pac_goal)
                 toc = time.perf_counter()
                 pac_runtimes[dimensions - 2, i, run] = toc - tic
 
                 log_file = open(log_path, "a")
                 log_file.write(
-                    f"PAC took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions and {sample_size / 2} positive sample points.\n")
+                    f"PAC took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions "
+                    f"and {sample_size / 2} positive sample points.\n")
                 log_file.close()
 
     mean_incalp_runtimes = np.mean(incalp_runtimes, axis=2)
@@ -188,25 +249,44 @@ def main():
     std_incalp_runtimes = np.std(incalp_runtimes, axis=2)
     std_pac_runtimes = np.std(pac_runtimes, axis=2)
 
-    fig, axs = plt.subplots(1, 3, sharey='all', constrained_layout=True)
-    for i, ax in enumerate(axs):
-        y_incalp = mean_incalp_runtimes[i, :]
-        y_pac = mean_pac_runtimes[i, :]
-        y_err_incalp = std_incalp_runtimes[i, :]
-        y_err_pac = std_pac_runtimes[i, :]
+    if problem_type == "simplexn" or problem_type == "cuben":
+        fig, axs = plt.subplots(1, 3, sharey='all', constrained_layout=True, figsize=(12, 3))
+        for i, ax in enumerate(axs):
+            y_incalp = mean_incalp_runtimes[i, :]
+            y_pac = mean_pac_runtimes[i, :]
+            y_err_incalp = std_incalp_runtimes[i, :]
+            y_err_pac = std_pac_runtimes[i, :]
+            ax.plot(sample_sizes, y_incalp, label='IncalP')
+            ax.plot(sample_sizes, y_pac, label='PAC')
+            ax.fill_between(sample_sizes, y_incalp - y_err_incalp, y_incalp + y_err_incalp, alpha=0.5)
+            ax.fill_between(sample_sizes, y_pac - y_err_pac, y_pac + y_err_pac, alpha=0.5)
+            ax.title.set_text(f"n: {i + 2}")
+            ax.set_xlabel("Sample size")
+        plt.setp(axs[0], ylabel='Time (s)')
+        axs[0].legend()
+        fig.suptitle(problem.name)
+        plot_file = f"output/{problem.name}-{time.time():.0f}.png"
+        plt.savefig(plot_file)
+    else:
+        fig, ax = plt.subplots(figsize=(5,4))
+        y_incalp = mean_incalp_runtimes[0, :]
+        y_pac = mean_pac_runtimes[0, :]
+        y_err_incalp = std_incalp_runtimes[0, :]
+        y_err_pac = std_pac_runtimes[0, :]
         ax.plot(sample_sizes, y_incalp, label='IncalP')
         ax.plot(sample_sizes, y_pac, label='PAC')
         ax.fill_between(sample_sizes, y_incalp - y_err_incalp, y_incalp + y_err_incalp, alpha=0.5)
         ax.fill_between(sample_sizes, y_pac - y_err_pac, y_pac + y_err_pac, alpha=0.5)
-        ax.title.set_text(f"n: {i + 2}")
+        ax.title.set_text(problem.name)
         ax.set_xlabel("Sample size")
-    plt.setp(axs[0], ylabel='Time (s)')
-    axs[0].legend()
-    fig.suptitle(problem.name)
-    plot_file = f"output/{problem.name}-{time.time():.0f}.png"
-    plt.savefig(plot_file)
+        ax.set_ylabel('Time (s)')
+        ax.legend()
+        plot_file = f"output/{problem.name}-{time.time():.0f}.png"
+        plt.savefig(plot_file)
+
 
     print(f"Finished! The plot can be found at {plot_file}.")
+
 
 if __name__ == "__main__":
     main()

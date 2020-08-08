@@ -185,4 +185,4 @@ def pollutionreduction():
     constraints.append(37 * x1 + 53 * x2 + 28 * x3 + 24 * x4 + 29 * x5 + 20 * x6 >= 125)
 
     theory = And(i for i in constraints)
-    return Problem(domain,theory,"polution")
+    return Problem(domain,theory,"pollution")

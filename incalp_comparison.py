@@ -207,7 +207,8 @@ def main():
                 pac_goal = "minimise"
             elif problem_type == "police":
                 problem = police()
-                num_constraints = 10
+                # 10 constraints, 3 of which are redundant
+                num_constraints = 7
                 pac_goal = "minimise"
 
             # We need at most 500 samples

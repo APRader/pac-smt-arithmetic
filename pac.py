@@ -18,7 +18,7 @@ class PACLearner:
         PAC decision procedure.
         :param examples: Examples in the form of a list of Z3 formulas.
         :param query: Z3 formula whose entailment will be decided given examples and background knowledge.
-        :param validity: A number from 0 to 1, that represents the validity. Higher number means higher validity.
+        :param validity: A number from 0 to 1 that represents the validity. Higher number means higher validity.
         :return: The state ("Accept" or "Reject") and the proportion of examples that entailed the query.
         """
         state = 'Accept'

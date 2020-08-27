@@ -111,98 +111,58 @@ def run_pac(samples, estimated_f, goal="maximise", validity=1, accuracy=64):
     :param estimated_f: SMT formula for the estimated objective function.
     :param goal: Whether the goal is to maximise or minimise the objective function.
     :param validity: The ratio of samples that must be valid against the queries.
-    :return: The estimated highest value of the objective function.
+    :return: The estimated optimal value of the objective function.
     """
-    lower_bound = None
-    upper_bound = None
-    if goal == "maximise":
-        # determine sign of optimal objective value
-        if pac_learning(samples, 0 >= estimated_f, validity):
-            sign = "negative"
+    lower = None
+    upper = None
+
+    if goal not in ("maximise", "minimise"):
+        raise ValueError("Goal must either be 'maximise' or 'minimise'.")
+
+    if goal == "minimise":
+        # Minimisation is the same as maximisation with f of opposite sign
+        estimated_f = -estimated_f
+
+    if pac_learning(samples, 0 >= estimated_f, validity):
+        sign = -1
+        if not pac_learning(samples, -1 >= estimated_f, validity):
+            # optimal objective value is between -1 and 0, but we only set magnitudes
+            lower = 0
+            upper = 0
         else:
-            sign = "positive"
-
-        if sign == "positive":
-            if pac_learning(samples, 1 >= estimated_f, validity):
-                # optimal objective value is between 0 and 1
-                lower_bound = 0
-                upper_bound = 1
-            else:
-                # optimal objective value is greater than 1, we find rough bounds using exponential search
-                bound = 1
-                while not lower_bound:
-                    bound *= 2
-                    if pac_learning(samples, bound >= estimated_f, validity):
-                        lower_bound = bound / 2
-                        upper_bound = bound
-
-        elif sign == "negative":
-            if not pac_learning(samples, -1 >= estimated_f, validity):
-                # optimal objective value is between -1 and 0
-                lower_bound = -1
-                upper_bound = 0
-            else:
-                # optimal objective value is less than -1, we find rough bounds using exponential search
-                bound = -1
-                while not lower_bound:
-                    bound *= 2
-                    if not pac_learning(samples, bound >= estimated_f, validity):
-                        lower_bound = bound
-                        upper_bound = bound / 2
-        else:
-            raise ValueError("Sign must either be 'positive' or 'negative'.")
-
-        # find tight bounds for optimal objective value using binary search
-        for i in range(accuracy):
-            if pac_learning(samples, (lower_bound + upper_bound) / 2 >= estimated_f, validity):
-                upper_bound = (lower_bound + upper_bound) / 2
-            else:
-                lower_bound = (lower_bound + upper_bound) / 2
-
-    elif goal == "minimise":
-
-        if pac_learning(samples, 0 <= estimated_f, validity):
-            sign = "positive"
-        else:
-            sign = "negative"
-
-        if sign == "positive":
-            if not pac_learning(samples, 1 <= estimated_f, validity):
-                lower_bound = 0
-                upper_bound = 1
-            else:
-                bound = 1
-                while not lower_bound:
-                    bound *= 2
-                    if not pac_learning(samples, bound <= estimated_f, validity):
-                        lower_bound = bound / 2
-                        upper_bound = bound
-
-        elif sign == "negative":
-            if pac_learning(samples, -1 <= estimated_f, validity):
-                lower_bound = -1
-                upper_bound = 0
-            else:
-                bound = -1
-                while not lower_bound:
-                    bound *= 2
-                    if pac_learning(samples, bound <= estimated_f, validity):
-                        lower_bound = bound
-                        upper_bound = bound / 2
-        else:
-            raise ValueError("Sign must either be 'positive' or 'negative'.")
-
-        for i in range(accuracy):
-            if pac_learning(samples, (lower_bound + upper_bound) / 2 <= estimated_f, validity):
-                lower_bound = (lower_bound + upper_bound) / 2
-            else:
-                upper_bound = (lower_bound + upper_bound) / 2
+            # optimal objective value is less than -1, we find rough bounds using exponential search
+            bound = -2
+            while pac_learning(samples, bound >= estimated_f, validity):
+                bound *= 2
+            lower = bound
+            upper = bound / 2
     else:
-        raise ValueError('Goal must either be "maximise" or "minimise".')
+        sign = 1
+        if pac_learning(samples, 1 >= estimated_f, validity):
+            # optimal objective value is between 0 and 1
+            lower = 0
+            upper = 1
+        else:
+            # optimal objective value is greater than 1, we find rough bounds using exponential search
+            bound = 2
+            while not pac_learning(samples, bound >= estimated_f, validity):
+                bound *= 2
+            lower = bound / 2
+            upper = bound
 
-    pac_estimated_f = (lower_bound + upper_bound) / 2
-    
-    return pac_estimated_f
+    # find tight bounds for optimal objective value using binary search
+    for i in range(accuracy):
+        if pac_learning(samples, (lower + upper) / 2 >= estimated_f, validity):
+            upper = (lower + upper) / 2
+        else:
+            lower = (lower + upper) / 2
+
+    pac_estimated_f = (lower + upper) / 2
+
+    if goal == "minimise":
+        return -pac_estimated_f
+    else:
+        return pac_estimated_f
 
 
 def make_rand_vector(dims):
@@ -234,8 +194,8 @@ def main():
         print("Wrong argument given. Please provide either simplexn, cuben, pollution or police")
         sys.exit()
 
-    sample_sizes = [50, 100, 200, 300]
-    num_runs = 10
+    sample_sizes = [50, 100]
+    num_runs = 2
     log_path = "output/incalp_comparison_log.txt"
     incalp_runtimes = np.zeros((len(all_dimensions), len(sample_sizes), num_runs))
     pac_runtimes = np.zeros((len(all_dimensions), len(sample_sizes), num_runs))
@@ -290,7 +250,7 @@ def main():
                     f"IncalP took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions "
                     f"and {sample_size} sample points.\n")
                 print(f"IncalP took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions "
-                    f"and {sample_size} sample points.\n")
+                      f"and {sample_size} sample points.\n")
                 log_file.close()
 
                 estimated_f = create_objective_function(problem, true_samples, dimensions)
@@ -310,40 +270,33 @@ def main():
     std_incalp_runtimes = np.std(incalp_runtimes, axis=2)
     std_pac_runtimes = np.std(pac_runtimes, axis=2)
 
-    if problem_type == "simplexn" or problem_type == "cuben":
+    def create_plot(i, ax):
+        y_incalp = mean_incalp_runtimes[i, :]
+        y_pac = mean_pac_runtimes[i, :]
+        y_err_incalp = std_incalp_runtimes[i, :]
+        y_err_pac = std_pac_runtimes[i, :]
+        ax.plot(sample_sizes, y_incalp, '--', label='IncalP(SMT)')
+        ax.plot(sample_sizes, y_pac, label='PAC')
+        ax.fill_between(sample_sizes, y_incalp - y_err_incalp, y_incalp + y_err_incalp, alpha=0.3)
+        ax.fill_between(sample_sizes, y_pac - y_err_pac, y_pac + y_err_pac, alpha=0.3)
+        ax.set_xlabel("Sample size")
+
+    if problem_type in ("simplexn", "cuben"):
         fig, axs = plt.subplots(1, 3, sharey='all', constrained_layout=True, figsize=(12, 3))
         for i, ax in enumerate(axs):
-            y_incalp = mean_incalp_runtimes[i, :]
-            y_pac = mean_pac_runtimes[i, :]
-            y_err_incalp = std_incalp_runtimes[i, :]
-            y_err_pac = std_pac_runtimes[i, :]
-            ax.plot(sample_sizes, y_incalp, label='IncalP')
-            ax.plot(sample_sizes, y_pac, label='PAC')
-            ax.fill_between(sample_sizes, y_incalp - y_err_incalp, y_incalp + y_err_incalp, alpha=0.5)
-            ax.fill_between(sample_sizes, y_pac - y_err_pac, y_pac + y_err_pac, alpha=0.5)
+            create_plot(i, ax)
             ax.title.set_text(f"n: {i + 2}")
-            ax.set_xlabel("Sample size")
         plt.setp(axs[0], ylabel='Time (s)')
         axs[0].legend()
         fig.suptitle(problem.name)
-        plot_file = f"output/{problem.name}-{time.time():.0f}.png"
-        plt.savefig(plot_file)
     else:
-        fig, ax = plt.subplots(figsize=(5, 4))
-        y_incalp = mean_incalp_runtimes[0, :]
-        y_pac = mean_pac_runtimes[0, :]
-        y_err_incalp = std_incalp_runtimes[0, :]
-        y_err_pac = std_pac_runtimes[0, :]
-        ax.plot(sample_sizes, y_incalp, label='IncalP')
-        ax.plot(sample_sizes, y_pac, label='PAC')
-        ax.fill_between(sample_sizes, y_incalp - y_err_incalp, y_incalp + y_err_incalp, alpha=0.5)
-        ax.fill_between(sample_sizes, y_pac - y_err_pac, y_pac + y_err_pac, alpha=0.5)
-        ax.title.set_text(problem.name)
-        ax.set_xlabel("Sample size")
+        fig, ax = plt.subplots(figsize=(4, 3))
+        create_plot(0, ax)
         ax.set_ylabel('Time (s)')
         ax.legend()
-        plot_file = f"output/{problem.name}-{time.time():.0f}.png"
-        plt.savefig(plot_file)
+
+    plot_file = f"output/{problem.name}-{time.time():.0f}.pdf"
+    plt.savefig(plot_file)
 
     print(f"Finished! The plot can be found at {plot_file}.")
 

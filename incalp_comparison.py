@@ -11,7 +11,7 @@ import random
 from incalp.lp_problems import simplexn, cuben, pollutionreduction, police
 from incalp.smt_check import SmtChecker
 import matplotlib.pyplot as plt
-import sys
+from z3 import *
 
 
 def get_samples(problem, num_pos_samples, num_neg_samples):
@@ -20,7 +20,7 @@ def get_samples(problem, num_pos_samples, num_neg_samples):
     :param problem: Problem object.
     :param num_pos_samples: Number of positive samples needed.
     :param num_neg_samples: Number of negative samples needed.
-    :return: lists of positive and negative samples.
+    :return: Lists of positive and negative samples.
     """
     true_samples = []
     false_samples = []
@@ -28,9 +28,9 @@ def get_samples(problem, num_pos_samples, num_neg_samples):
     while len(true_samples) < num_pos_samples or len(false_samples) < num_neg_samples:
         instance = dict()
 
-        for v in problem.domain.variables:
-            lb, ub = problem.domain.var_domains[v]
-            instance[v] = random.uniform(lb, ub)
+        for variable in problem.domain.variables:
+            lb, ub = problem.domain.var_domains[variable]
+            instance[variable] = random.uniform(lb, ub)
         sample = (instance, SmtChecker(instance).check(problem.theory))
 
         if sample[1] and len(true_samples) < num_pos_samples:
@@ -53,7 +53,57 @@ def run_incalp(domain, samples, num_half_spaces):
     # Selecting 10 random violations after each round
     selection_strategy = RandomViolationsStrategy(10)
     learner = LPLearner(num_half_spaces, selection_strategy)
-    learner.learn(domain, samples, initial_indices)
+    model = learner.learn(domain, samples, initial_indices)
+    return model
+
+
+def convert_to_smtlib(model, domain, objective_f, goal="maximise"):
+    """
+    Converts a PySMT model to an optimisation problem in SMTLIB format.
+    :param model: A PySMT formula.
+    :param domain: A Domain object.
+    :param objective_f: The objective PySMT function.
+    :param goal: Maximise or minimise.
+    :return: A string containing the full optimisation SMTLIB problem.
+    """
+    if goal not in ("maximise", "minimise"):
+        raise ValueError("Goal must either be 'maximise' or 'minimise'.")
+
+    smtlib_model = model.to_smtlib()
+    smtlib_f = objective_f.to_smtlib()
+
+    # Creating the SMTLIB string and declaring the objective function
+    smtlib_problem = "(declare-fun objective-f () Real)"
+    # Adding variable declarations and domains
+    for variable in domain.real_vars:
+        smtlib_problem += f"(declare-const {variable} {domain.var_types.get(variable)})"\
+                          f"(assert (>= {variable} {domain.var_domains.get(variable)[0]}))"\
+                          f"(assert (<= {variable} {domain.var_domains.get(variable)[1]}))"
+    # Adding hard and soft constraint
+    smtlib_problem += f"(assert {smtlib_model})(assert (= objective-f {smtlib_f}))"
+    if goal == "maximise":
+        smtlib_problem += "(maximize objective-f)"
+    else:
+        smtlib_problem += "(minimize objective-f)"
+
+    return smtlib_problem
+
+
+def optimise_model(smtlib_problem):
+    """
+    Finding the optimal objective value function within a model.
+    :param smtlib_problem: The entire optimisation problem in SMTLIB format.
+    :return: The optimum objective value.
+    """
+    opt = Optimize()
+    opt.from_string(smtlib_problem)
+    opt.check()
+    m = opt.model()
+    for d in m.decls():
+        if d.name() == "objective-f":
+            r = m[d]
+            return float(r.numerator_as_long()) / float(r.denominator_as_long())
+    return None
 
 
 def create_objective_function(problem, true_samples, dimensions):
@@ -67,7 +117,7 @@ def create_objective_function(problem, true_samples, dimensions):
     variables = problem.domain.variables
     if problem.name == "simplexn" or problem.name == "cuben":
         # We create a random objective function
-        random_direction = np.abs(make_rand_vector(dimensions))
+        random_direction = make_rand_vector(dimensions)
         true_points = np.array([list(sample[0].values()) for sample in true_samples])
         fs = true_points.dot(random_direction)
         noisy_fs = fs + np.random.normal(0, 0.05, fs.shape)
@@ -124,10 +174,9 @@ def run_pac(samples, estimated_f, goal="maximise", validity=1, accuracy=64):
         estimated_f = -estimated_f
 
     if pac_learning(samples, 0 >= estimated_f, validity):
-        sign = -1
         if not pac_learning(samples, -1 >= estimated_f, validity):
             # optimal objective value is between -1 and 0, but we only set magnitudes
-            lower = 0
+            lower = -1
             upper = 0
         else:
             # optimal objective value is less than -1, we find rough bounds using exponential search
@@ -137,7 +186,6 @@ def run_pac(samples, estimated_f, goal="maximise", validity=1, accuracy=64):
             lower = bound
             upper = bound / 2
     else:
-        sign = 1
         if pac_learning(samples, 1 >= estimated_f, validity):
             # optimal objective value is between 0 and 1
             lower = 0
@@ -167,9 +215,9 @@ def run_pac(samples, estimated_f, goal="maximise", validity=1, accuracy=64):
 
 def make_rand_vector(dims):
     """
-    Return a vector in a random dimension.
+    Create a vector in a random dimension.
     :param dims: Number of dimensions of the vector.
-    :return:
+    :return: The vector as a numpy array
     """
     vec = [gauss(0, 1) for _ in range(dims)]
     mag = sum(x ** 2 for x in vec) ** .5
@@ -194,8 +242,8 @@ def main():
         print("Wrong argument given. Please provide either simplexn, cuben, pollution or police")
         sys.exit()
 
-    sample_sizes = [50, 100]
-    num_runs = 2
+    sample_sizes = [50, 100, 200, 300, 400, 500]
+    num_runs = 10
     log_path = "output/incalp_comparison_log.txt"
     incalp_runtimes = np.zeros((len(all_dimensions), len(sample_sizes), num_runs))
     pac_runtimes = np.zeros((len(all_dimensions), len(sample_sizes), num_runs))
@@ -207,7 +255,6 @@ def main():
         for dimensions in all_dimensions:
             log_file = open(log_path, "a")
             log_file.write(f"DIMENSIONS: {dimensions}\n")
-            print(f"DIMENSIONS: {dimensions}\n")
             log_file.close()
 
             if problem_type == "simplexn":
@@ -240,20 +287,27 @@ def main():
                 true_samples = all_true_samples[:int(sample_size / 2)]
                 false_samples = all_false_samples[:int(sample_size / 2)]
 
+                estimated_f = create_objective_function(problem, true_samples, dimensions)
+
+                true_smtlib_problem = convert_to_smtlib(problem.theory, problem.domain, estimated_f, pac_goal)
+                true_f = optimise_model(true_smtlib_problem)
+
                 tic = time.perf_counter()
-                run_incalp(problem.domain, true_samples + false_samples, num_constraints)
+                model = run_incalp(problem.domain, true_samples + false_samples, num_constraints)
                 toc = time.perf_counter()
+                smtlib_problem = convert_to_smtlib(model, problem.domain, estimated_f, pac_goal)
+                tuc = time.perf_counter()
+                incalp_estimated_f = optimise_model(smtlib_problem)
+                tac = time.perf_counter()
                 incalp_runtimes[dimensions - 2, i, run] = toc - tic
 
                 log_file = open(log_path, "a")
                 log_file.write(
-                    f"IncalP took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions "
+                    f"IncalP took {toc - tic:0.1f} + {tac - tuc:0.1f} seconds for a {problem.name} with {dimensions} dimensions "
                     f"and {sample_size} sample points.\n")
-                print(f"IncalP took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions "
-                      f"and {sample_size} sample points.\n")
+
                 log_file.close()
 
-                estimated_f = create_objective_function(problem, true_samples, dimensions)
                 tic = time.perf_counter()
                 pac_estimated_f = run_pac(true_samples, estimated_f, pac_goal)
                 toc = time.perf_counter()
@@ -264,6 +318,10 @@ def main():
                     f"PAC took {toc - tic:0.1f} seconds for a {problem.name} with {dimensions} dimensions "
                     f"and {sample_size / 2} positive sample points.\n")
                 log_file.close()
+
+                print(f"IncalP estimated f: {incalp_estimated_f}")
+                print(f"PAC estimated f: {pac_estimated_f}")
+                print(f"True f: {true_f}\n")
 
     mean_incalp_runtimes = np.mean(incalp_runtimes, axis=2)
     mean_pac_runtimes = np.mean(pac_runtimes, axis=2)
@@ -303,22 +361,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-"""
-def generate_models(theory, n, z3_vars, var_domains):
-    s = Solver()
-    s.add(theory)
-    domain_boundaries = And([And(z3_vars[v] > var_domains[v][0], z3_vars[v] < var_domains[v][1]) for v in z3_vars])
-    s.add(domain_boundaries)
-    models = []
-    while s.check() == sat and len(models) < n:
-        model = s.model()
-        models.append(model)
-        block = []
-        # add constraint that blocks the same model from being returned again
-        for d in model:
-            c = d()
-            block.append(Or(c <= model[d] - 0.01, c >= model[d] + 0.01))
-        s.add(Or(block))
-    return models
-"""

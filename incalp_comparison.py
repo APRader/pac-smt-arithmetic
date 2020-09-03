@@ -9,15 +9,16 @@ import random
 from incalp.lp_problems import simplexn, cuben, pollutionreduction, police
 from incalp.smt_check import SmtChecker
 import matplotlib.pyplot as plt
-from z3 import Optimize
+from z3 import Optimize, Ints
 from pysmt.shortcuts import And, is_sat
 import argparse
 import string
+import math
 
-SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
-NUM_RUNS = 10
-# SAMPLE_SIZES = [50, 100]
-# NUM_RUNS = 2
+# SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
+# NUM_RUNS = 10
+SAMPLE_SIZES = [50, 100, 200]
+NUM_RUNS = 2
 
 
 def get_samples(problem, num_pos_samples, num_neg_samples):
@@ -108,10 +109,10 @@ def optimise_model(smtlib_problem):
     for d in m.decls():
         # It is assumed that the objective value constant is called objective-f
         if d.name() == "objective-f":
-            # Getting the optimal value of the objective function
-            r = m[d]
-            # Convert Z3 variable into Python float
-            return float(r.numerator_as_long()) / float(r.denominator_as_long())
+            # Getting the optimal value of the objective function as a decimal string
+            r = m[d].as_decimal(16)
+            # Turning string representation with ? at end to float
+            return float(r.replace("?", ""))
 
 
 def create_objective_function(problem):
@@ -150,6 +151,18 @@ def create_intervals(domain, samples, width):
             for sample in samples]
 
 
+def add_noise(samples, noise_std):
+    """
+    Add Gaussian noise to each sample.
+    :param samples: List of samples.
+    :param noise_std: Standard deviation of Gaussian noise.
+    :return: Noisy samples.
+    """
+    return [({key: value + np.random.normal(0, noise_std) for key, value in sample[0].items()}, sample[1])
+            for sample in samples]
+
+
+
 def pac_learning(samples, query, validity, intervals=False):
     """
     Run DecidePAC to determine whether the samples satisfy the query.
@@ -175,7 +188,7 @@ def pac_learning(samples, query, validity, intervals=False):
     return num_true_samples / len(samples) >= validity
 
 
-def run_pac(samples, objective_f, goal="maximise", validity=1, accuracy=64):
+def run_pac(samples, objective_f, goal="maximise", validity=1, accuracy=64, intervals=False):
     """
     Run OptimisePAC to find optimal objective value.
     :param accuracy: Number of iterations of halving the bounded interval.
@@ -183,6 +196,7 @@ def run_pac(samples, objective_f, goal="maximise", validity=1, accuracy=64):
     :param objective_f: SMT formula for the objective function we want to optimise.
     :param goal: Whether the goal is to maximise or minimise the objective function.
     :param validity: The ratio of samples that must be valid against the queries.
+    :param intervals: Whether the samples are intervals rather than assignments.
     :return: The estimated optimal value of the objective function.
     """
     if goal not in ("maximise", "minimise"):
@@ -192,34 +206,34 @@ def run_pac(samples, objective_f, goal="maximise", validity=1, accuracy=64):
         # Minimisation is the same as maximisation with objective function of opposite sign
         objective_f = -objective_f
 
-    if pac_learning(samples, 0 >= objective_f, validity):
+    if pac_learning(samples, 0 >= objective_f, validity, intervals):
         # Optimal objective value is negative or 0
-        if not pac_learning(samples, -1 >= objective_f, validity):
+        if not pac_learning(samples, -1 >= objective_f, validity, intervals):
             lower = -1
             upper = 0
         else:
             # Optimal objective value is less than -1, finding rough bounds using exponential search
             bound = -2
-            while pac_learning(samples, bound >= objective_f, validity):
+            while pac_learning(samples, bound >= objective_f, validity, intervals):
                 bound *= 2
             lower = bound
             upper = bound / 2
     else:
         # Optimal objective value is positive
-        if pac_learning(samples, 1 >= objective_f, validity):
+        if pac_learning(samples, 1 >= objective_f, validity, intervals):
             lower = 0
             upper = 1
         else:
             # Optimal objective value is greater than 1, finding rough bounds using exponential search
             bound = 2
-            while not pac_learning(samples, bound >= objective_f, validity):
+            while not pac_learning(samples, bound >= objective_f, validity, intervals):
                 bound *= 2
             lower = bound / 2
             upper = bound
 
     # Finding tight bounds for optimal objective value using binary search
     for i in range(accuracy):
-        if pac_learning(samples, (lower + upper) / 2 >= objective_f, validity):
+        if pac_learning(samples, (lower + upper) / 2 >= objective_f, validity, intervals):
             upper = (lower + upper) / 2
         else:
             lower = (lower + upper) / 2
@@ -235,7 +249,7 @@ def run_pac(samples, objective_f, goal="maximise", validity=1, accuracy=64):
 
 def create_plot(ax, x_values, x_label, y1_values, y2_values, y1_error, y2_error, y1_label, y2_label):
     """
-    Creates line graph for two sets of values.
+    Create line graph for two sets of values.
     :param ax: Axis object.
     :param x_values: X values.
     :param x_label: Label for x axis.
@@ -257,12 +271,21 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("problem", choices=["simplexn", "cuben", "pollution", "police"],
                         help="choose the type of problem to run the experiments on")
-    parser.add_argument("-s", "--seed", type=int, help="set the seed for the random number generator")
+    parser.add_argument("-s", "--seed", type=int, help="the seed for the random number generator")
+    parser.add_argument("-n", "--noise", type=float, help="add Gaussian noise to samples with given standard deviation")
     parser.add_argument("-v", "--verbose", action="store_true", help="turn on verbose mode")
     args = parser.parse_args()
 
     problem_type = args.problem
     verbose = args.verbose
+    noise_std = args.noise
+
+    # Creating a remark about the noise used for the plot titles later
+    if noise_std:
+        noise_string = f", noise: {noise_std}"
+    else:
+        noise_string = ""
+
     all_dimensions = None
     optimisation_goal = None
     problem = None
@@ -289,9 +312,11 @@ def main():
         random.seed(seed)
         np.random.seed(seed)
 
-    # Allocating arrays to store the running times
+    # Allocating arrays to store the running times and objective value estimate errors
     incalp_runtimes = np.zeros((len(all_dimensions), len(SAMPLE_SIZES), NUM_RUNS))
     pac_runtimes = np.zeros((len(all_dimensions), len(SAMPLE_SIZES), NUM_RUNS))
+    incalp_f_errors = np.zeros((len(all_dimensions), len(SAMPLE_SIZES), NUM_RUNS))
+    pac_f_errors = np.zeros((len(all_dimensions), len(SAMPLE_SIZES), NUM_RUNS))
 
     for run in range(NUM_RUNS):
         print(f"Starting run {run + 1} out of {NUM_RUNS}.")
@@ -320,25 +345,31 @@ def main():
             # We need at most max/2 positive and max/2 negative samples
             max_samples = max(SAMPLE_SIZES)
             all_true_samples, all_false_samples = get_samples(problem, max_samples // 2, max_samples // 2)
-            # all_true_intervals = create_intervals(problem.domain, all_true_samples, 0.1)
+
+            if noise_std:
+                # We add noise and turn the true samples into intervals for PAC
+                all_true_samples = add_noise(all_true_samples, noise_std)
+                all_false_samples = add_noise(all_false_samples, noise_std)
+                all_true_intervals = create_intervals(problem.domain, all_true_samples,
+                                                      6*math.log(dimensions)*noise_std)
 
             if verbose:
-                print(f"Created {max_samples} samples.")
+                print(f"Created {max_samples} samples in {dimensions} dimensions.")
+
+            # Calculating the true optimal objective value using the underlying problem
+            objective_f = create_objective_function(problem)
+            true_smtlib_problem = convert_to_smtlib(problem.theory, problem.domain, objective_f, optimisation_goal)
+            true_f = optimise_model(true_smtlib_problem)
+
+            if verbose:
+                print(f"The true objective value is {true_f}.")
 
             for j, sample_size in enumerate(SAMPLE_SIZES):
 
                 true_samples = all_true_samples[:sample_size // 2]
                 false_samples = all_false_samples[:sample_size // 2]
-                # true_intervals = all_true_intervals[:sample_size // 2]
-
-                objective_f = create_objective_function(problem)
-
-                # Calculating the true optimal objective value using the underlying problem
-                true_smtlib_problem = convert_to_smtlib(problem.theory, problem.domain, objective_f, optimisation_goal)
-                true_f = optimise_model(true_smtlib_problem)
-
-                if verbose:
-                    print(f"The true objective value is {true_f}.")
+                if noise_std:
+                    true_intervals = all_true_intervals[:sample_size // 2]
 
                 # Creating a model with IncalP using examples
                 tic = time.perf_counter()
@@ -351,6 +382,7 @@ def main():
                 tac = time.perf_counter()
                 # Time IncalP took to create the model and find optimal objective value
                 incalp_runtimes[i, j, run] = (toc - tic) + (tac - tuc)
+                incalp_f_errors[i, j, run] = np.abs(incalp_estimated_f - true_f)
 
                 if verbose:
                     print(f"IncalP took {toc - tic:0.2f} + {tac - tuc:0.2f} seconds for {sample_size} samples.")
@@ -358,9 +390,13 @@ def main():
 
                 # Using implicit learning with PAC to find the optimal objective value
                 tec = time.perf_counter()
-                pac_estimated_f = run_pac(true_samples, objective_f, optimisation_goal)
+                if noise_std:
+                    pac_estimated_f = run_pac(true_intervals, objective_f, optimisation_goal, intervals=True)
+                else:
+                    pac_estimated_f = run_pac(true_samples, objective_f, optimisation_goal)
                 tyc = time.perf_counter()
                 pac_runtimes[i, j, run] = tyc - tec
+                pac_f_errors[i, j, run] = np.abs(pac_estimated_f - true_f)
 
                 if verbose:
                     print(f"PAC took {tyc - tec:0.2f} seconds for {sample_size} samples.")
@@ -370,16 +406,20 @@ def main():
                 log_file.write(f"SAMPLES: {sample_size}\n"
                                f"True f: {true_f}\n"
                                f"IncalP f: {incalp_estimated_f}\n"
-                               f"PAC f:f: {pac_estimated_f}\n"
+                               f"PAC f: {pac_estimated_f}\n"
                                f"IncalP time: {(toc - tic) + (tac - tuc)} seconds\n"
                                f"PAC time: {tyc - tec}\n")
                 log_file.close()
 
-    # Calculating mean and standard deviation of all the running times
+    # Calculating mean and standard deviation of all the running times and objective estimate errors
     mean_incalp_runtimes = np.mean(incalp_runtimes, axis=2)
     mean_pac_runtimes = np.mean(pac_runtimes, axis=2)
     std_incalp_runtimes = np.std(incalp_runtimes, axis=2)
     std_pac_runtimes = np.std(pac_runtimes, axis=2)
+    mean_incalp_f_errors = np.mean(incalp_f_errors, axis=2)
+    mean_pac_f_errors = np.mean(pac_f_errors, axis=2)
+    std_incalp_f_errors = np.std(incalp_f_errors, axis=2)
+    std_pac_f_errors = np.std(pac_f_errors, axis=2)
 
     # Plotting running times
     if problem_type in ("simplexn", "cuben"):
@@ -390,18 +430,39 @@ def main():
             ax.title.set_text(f"n: {j + 2}")
         plt.setp(axs[0], ylabel='Time (s)')
         axs[0].legend()
-        fig.suptitle(problem.name)
+        fig.suptitle(f"{problem.name} running times{noise_string}")
     else:
         fig, ax = plt.subplots(figsize=(5, 4))
         create_plot(ax, SAMPLE_SIZES, "Sample size", mean_incalp_runtimes[0, :], mean_pac_runtimes[0, :],
                     std_incalp_runtimes[0, :], std_pac_runtimes[0, :], "IncalP(SMT)", "PAC")
         ax.set_ylabel('Time (s)')
         ax.legend()
+        fig.suptitle(f"{problem.name} running times{noise_string}")
+    plot_file_times = f"output/{random_string}_{problem.name}_runtimes.pdf"
+    plt.savefig(plot_file_times)
 
-    plot_file = f"output/{random_string}_{problem.name}.pdf"
-    plt.savefig(plot_file)
+    # Plotting objective value estimates
+    if problem_type in ("simplexn", "cuben"):
+        fig, axs = plt.subplots(1, 3, sharey='all', constrained_layout=True, figsize=(12, 3))
+        for j, ax in enumerate(axs):
+            create_plot(ax, SAMPLE_SIZES, "Sample size", mean_incalp_f_errors[j, :], mean_pac_f_errors[j, :],
+                        std_incalp_f_errors[j, :], std_pac_f_errors[j, :], "IncalP(SMT)", "PAC")
+            ax.title.set_text(f"n: {j + 2}")
+        plt.setp(axs[0], ylabel='Distance from true f')
+        axs[0].legend()
+        fig.suptitle(f"{problem.name} objective value estimates{noise_string}")
+    else:
+        fig, ax = plt.subplots(figsize=(5, 4))
+        create_plot(ax, SAMPLE_SIZES, "Sample size", mean_incalp_f_errors[0, :], mean_pac_f_errors[0, :],
+                    std_incalp_f_errors[0, :], std_pac_f_errors[0, :], "IncalP(SMT)", "PAC")
+        ax.set_ylabel('Distance from true f')
+        ax.legend()
+        fig.suptitle(f"{problem.name} objective value estimates{noise_string}")
+    plot_file_fs = f"output/{random_string}_{problem.name}_f_estimates.pdf"
+    plt.savefig(plot_file_fs)
 
-    print(f"Finished! The plot can be found at {plot_file}.")
+    print(f"Finished!\nThe running times plot can be found at {plot_file_times}.\n"
+          f"The objective value plot at {plot_file_fs}.")
 
 
 if __name__ == "__main__":

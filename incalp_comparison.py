@@ -9,16 +9,14 @@ import random
 from incalp.lp_problems import simplexn, cuben, pollutionreduction, police
 from incalp.smt_check import SmtChecker
 import matplotlib.pyplot as plt
-from z3 import Optimize, Ints
+from z3 import Optimize
 from pysmt.shortcuts import And, is_sat
 import argparse
 import string
 import math
 
-# SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
-# NUM_RUNS = 10
-SAMPLE_SIZES = [50, 100, 200]
-NUM_RUNS = 2
+SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
+NUM_RUNS = 10
 
 
 def get_samples(problem, num_pos_samples, num_neg_samples):
@@ -188,7 +186,7 @@ def pac_learning(samples, query, validity, intervals=False):
     return num_true_samples / len(samples) >= validity
 
 
-def run_pac(samples, objective_f, goal="maximise", validity=1, accuracy=64, intervals=False):
+def run_pac(samples, objective_f, goal="maximise", validity=1.0, accuracy=64, intervals=False):
     """
     Run OptimisePAC to find optimal objective value.
     :param accuracy: Number of iterations of halving the bounded interval.
@@ -391,7 +389,8 @@ def main():
                 # Using implicit learning with PAC to find the optimal objective value
                 tec = time.perf_counter()
                 if noise_std:
-                    pac_estimated_f = run_pac(true_intervals, objective_f, optimisation_goal, intervals=True)
+                    pac_estimated_f = run_pac(true_intervals, objective_f, optimisation_goal,
+                                              validity=0.95, intervals=True)
                 else:
                     pac_estimated_f = run_pac(true_samples, objective_f, optimisation_goal)
                 tyc = time.perf_counter()

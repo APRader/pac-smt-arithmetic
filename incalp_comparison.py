@@ -351,54 +351,54 @@ def main():
     incalp_f_errors = np.zeros((len(all_dimensions), len(SAMPLE_SIZES), NUM_RUNS))
     pac_f_errors = np.zeros((len(all_dimensions), len(SAMPLE_SIZES), NUM_RUNS))
 
-    for run in range(NUM_RUNS):
-        print(f"Starting run {run + 1} out of {NUM_RUNS}.\n")
+    for j, sample_size in enumerate(SAMPLE_SIZES):
+        print(f"Using {sample_size} samples.")
 
-        for i, dimensions in enumerate(all_dimensions):
-            log_file = open(log_path, "a+")
-            log_file.write(f"DIMENSIONS: {dimensions}\n")
-            log_file.close()
+        for run in range(NUM_RUNS):
+            print(f"\tStarting run {run + 1} out of {NUM_RUNS}.")
 
-            num_constraints = None
+            for i, dimensions in enumerate(all_dimensions):
+                log_file = open(log_path, "a+")
+                log_file.write(f"DIMENSIONS: {dimensions}\n")
+                log_file.close()
 
-            if problem_type == "simplexn":
-                problem = simplexn(dimensions)
-                num_constraints = dimensions * (dimensions - 1) + 1
-            elif problem_type == "cuben":
-                problem = cuben(dimensions)
-                num_constraints = 2 * dimensions
-            elif problem_type == "pollution":
-                problem = pollutionreduction()
-                num_constraints = 3
-            elif problem_type == "police":
-                problem = police()
-                # 10 constraints, 3 of which are redundant
-                num_constraints = 7
+                num_constraints = None
 
-            # We need at most max/2 positive and max/2 negative samples
-            max_samples = max(SAMPLE_SIZES)
-            all_true_samples, all_false_samples = get_samples(problem, max_samples // 2, max_samples // 2)
-            all_true_intervals = None
+                if problem_type == "simplexn":
+                    problem = simplexn(dimensions)
+                    num_constraints = dimensions * (dimensions - 1) + 1
+                elif problem_type == "cuben":
+                    problem = cuben(dimensions)
+                    num_constraints = 2 * dimensions
+                elif problem_type == "pollution":
+                    problem = pollutionreduction()
+                    num_constraints = 3
+                elif problem_type == "police":
+                    problem = police()
+                    # 10 constraints, 3 of which are redundant
+                    num_constraints = 7
 
-            if noise_std:
-                # We add noise and turn the true samples into intervals for PAC
-                all_true_samples = add_noise(all_true_samples, noise_std)
-                all_false_samples = add_noise(all_false_samples, noise_std)
-                all_true_intervals = create_intervals(problem.domain, all_true_samples,
-                                                      6 * math.log(dimensions) * noise_std)
+                # 50% positive and 50% negative samples
+                all_true_samples, all_false_samples = get_samples(problem, sample_size // 2, sample_size // 2)
+                all_true_intervals = None
 
-            if verbose:
-                print(f"Created {max_samples} samples in {dimensions} dimensions.\n")
+                if noise_std:
+                    # We add noise and turn the true samples into intervals for PAC
+                    all_true_samples = add_noise(all_true_samples, noise_std)
+                    all_false_samples = add_noise(all_false_samples, noise_std)
+                    all_true_intervals = create_intervals(problem.domain, all_true_samples,
+                                                          6 * math.log(dimensions) * noise_std)
 
-            # Calculating the true optimal objective value using the underlying problem
-            objective_f = create_objective_function(problem)
-            true_smtlib_problem = convert_to_smtlib(problem.theory, problem.domain, objective_f, optimisation_goal)
-            true_f = optimise_model(true_smtlib_problem)
+                if verbose:
+                    print(f"\t\tCreated {sample_size} samples in {dimensions} dimensions.")
 
-            if verbose:
-                print(f"The true objective value is {true_f}.\n")
+                # Calculating the true optimal objective value using the underlying problem
+                objective_f = create_objective_function(problem)
+                true_smtlib_problem = convert_to_smtlib(problem.theory, problem.domain, objective_f, optimisation_goal)
+                true_f = optimise_model(true_smtlib_problem)
 
-            for j, sample_size in enumerate(SAMPLE_SIZES):
+                if verbose:
+                    print(f"\t\tThe true objective value is {true_f}.")
 
                 true_samples = all_true_samples[:sample_size // 2]
                 false_samples = all_false_samples[:sample_size // 2]
@@ -420,8 +420,8 @@ def main():
                 incalp_f_errors[i, j, run] = np.abs(incalp_estimated_f - true_f)
 
                 if verbose:
-                    print(f"IncalP took {toc - tic:0.2f} + {tac - tuc:0.2f} seconds for {sample_size} samples.")
-                    print(f"IncalP-estimated objective value: {incalp_estimated_f}.")
+                    print(f"\t\tIncalP took {toc - tic:0.2f} + {tac - tuc:0.2f} seconds.")
+                    print(f"\t\tIncalP-estimated objective value: {incalp_estimated_f}.")
 
                 # Using implicit learning with PAC to find the optimal objective value
                 tec = time.perf_counter()
@@ -435,8 +435,8 @@ def main():
                 pac_f_errors[i, j, run] = np.abs(pac_estimated_f - true_f)
 
                 if verbose:
-                    print(f"PAC took {tyc - tec:0.2f} seconds for {sample_size} samples.")
-                    print(f"PAC-estimated objective value: {pac_estimated_f}.\n")
+                    print(f"\t\tPAC took {tyc - tec:0.2f} seconds.")
+                    print(f"\t\tPAC-estimated objective value: {pac_estimated_f}.\n")
 
                 log_file = open(log_path, "a")
                 log_file.write(f"SAMPLES: {sample_size}\n"
@@ -444,7 +444,7 @@ def main():
                                f"IncalP f: {incalp_estimated_f}\n"
                                f"PAC f: {pac_estimated_f}\n"
                                f"IncalP time: {(toc - tic) + (tac - tuc)} seconds\n"
-                               f"PAC time: {tyc - tec}\n")
+                               f"PAC time: {tyc - tec} seconds\n\n")
                 log_file.close()
 
     # Calculating mean and standard deviation of all the running times and objective estimate errors
@@ -459,12 +459,12 @@ def main():
 
     # Plotting running times
     create_plots(problem_type, mean_incalp_runtimes, mean_pac_runtimes, std_incalp_runtimes,std_pac_runtimes,
-                 f"{problem_type} running times{noise_string}", random_string, "Time (s)")
+                 f"{problem_type} running times{noise_string}", "Time (s)")
     plot_file_times = f"output/{random_string}_{problem_type}_runtimes.pdf"
     plt.savefig(plot_file_times)
     # Plotting objective value estimates
     create_plots(problem_type, mean_incalp_f_errors, mean_pac_f_errors, std_incalp_f_errors, std_pac_f_errors,
-                 f"{problem_type} objective value estimates{noise_string}", random_string, "Distance from true f")
+                 f"{problem_type} objective value estimates{noise_string}", "Distance from true f")
     plot_file_fs = f"output/{random_string}_{problem_type}_fs.pdf"
     plt.savefig(plot_file_fs)
 

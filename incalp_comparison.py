@@ -1,23 +1,27 @@
 # This code uses functions taken from https://github.com/samuelkolb/incal/releases
 # All the modules from IncalP are placed in the folder incalp
 
-import time
-import numpy as np
-from incalp.incalpsmt import LPLearner
-from incalp.incremental_learner import RandomViolationsStrategy
+import argparse
+import math
 import random
+import string
+import time
+
+import matplotlib.pyplot as plt
+import numpy as np
+from pysmt.shortcuts import And, is_sat
+from z3 import Optimize
+
+from incalp.dt_selection import get_distances
+from incalp.incalpsmt import LPLearner
+from incalp.incremental_learner import MaxViolationsStrategy
 from incalp.lp_problems import simplexn, cuben, pollutionreduction, police
 from incalp.smt_check import SmtChecker
-import matplotlib.pyplot as plt
-from z3 import Optimize
-from pysmt.shortcuts import And, is_sat
-import argparse
-import string
-import math
 
-SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
-NUM_RUNS = 10
-
+#SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
+#NUM_RUNS = 2
+SAMPLE_SIZES = [50, 100]
+NUM_RUNS = 2
 
 def get_samples(problem, num_pos_samples, num_neg_samples):
     """
@@ -54,10 +58,11 @@ def run_incalp(domain, samples, num_half_spaces):
     :param num_half_spaces: The number of half-spaces the learned model should contain.
     :return: The learned model.
     """
-    # Starting with 20 random samples
+    # Starting with 20 random samples, the standard in the original IncalP code
     initial_indices = random.sample(range(len(samples)), 20)
-    # Selecting 10 random violations after each round
-    selection_strategy = RandomViolationsStrategy(10)
+    # Choosing the SelectDT heuristic, which is called MaxViolationsStrategy
+    weights = [min(d.values()) for d in get_distances(domain, samples)]
+    selection_strategy = MaxViolationsStrategy(1, weights)
     learner = LPLearner(num_half_spaces, selection_strategy)
     return learner.learn(domain, samples, initial_indices)
 
@@ -158,7 +163,6 @@ def add_noise(samples, noise_std):
     """
     return [({key: value + np.random.normal(0, noise_std) for key, value in sample[0].items()}, sample[1])
             for sample in samples]
-
 
 
 def pac_learning(samples, query, validity, intervals=False):
@@ -265,6 +269,37 @@ def create_plot(ax, x_values, x_label, y1_values, y2_values, y1_error, y2_error,
     ax.set_xlabel(x_label)
 
 
+def create_plots(problem_name, means_incalp, means_pac, stds_incalp, stds_pac, title, y_label):
+    """
+    Create comparison plots between IncalP and PAC
+    :param problem_name: Name of the problem.
+    :param means_incalp: Array of mean values for IncalP.
+    :param means_pac: Array of mean values for PAC.
+    :param stds_incalp: Array of standard deviation values for IncalP.
+    :param stds_pac: Array of standard deviation values for PAC.
+    :param title: Title for the graph.
+    :param y_label: Y-axis label.
+    """
+    if problem_name in ("simplexn", "cuben"):
+        fig, axs = plt.subplots(1, 3, sharey='all', constrained_layout=True, figsize=(12, 3))
+        for j, ax in enumerate(axs):
+            create_plot(ax, SAMPLE_SIZES, "Sample size", means_incalp[j, :], means_pac[j, :],
+                        stds_incalp[j, :], stds_pac[j, :], "IncalP(SMT)", "PAC")
+            ax.title.set_text(f"n: {j + 2}")
+        plt.setp(axs[0], ylabel=y_label)
+        axs[0].legend()
+        fig.suptitle(title)
+    elif problem_name in ("pollution", "police"):
+        fig, ax = plt.subplots(figsize=(5, 4))
+        create_plot(ax, SAMPLE_SIZES, "Sample size", means_incalp[0, :], means_pac[0, :],
+                    stds_incalp[0, :], stds_pac[0, :], "IncalP(SMT)", "PAC")
+        ax.set_ylabel(y_label)
+        ax.legend()
+        fig.suptitle(title)
+    else:
+        raise ValueError("Problem name must be either simplexn, cuben, pollution or police.")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("problem", choices=["simplexn", "cuben", "pollution", "police"],
@@ -277,6 +312,7 @@ def main():
     problem_type = args.problem
     verbose = args.verbose
     noise_std = args.noise
+    seed = args.seed
 
     # Creating a remark about the noise used for the plot titles later
     if noise_std:
@@ -305,7 +341,6 @@ def main():
     print(f"Log file: {log_path}")
 
     # Setting the seed for random number generators
-    seed = args.seed
     if seed:
         random.seed(seed)
         np.random.seed(seed)
@@ -317,7 +352,7 @@ def main():
     pac_f_errors = np.zeros((len(all_dimensions), len(SAMPLE_SIZES), NUM_RUNS))
 
     for run in range(NUM_RUNS):
-        print(f"Starting run {run + 1} out of {NUM_RUNS}.")
+        print(f"Starting run {run + 1} out of {NUM_RUNS}.\n")
 
         for i, dimensions in enumerate(all_dimensions):
             log_file = open(log_path, "a+")
@@ -343,16 +378,17 @@ def main():
             # We need at most max/2 positive and max/2 negative samples
             max_samples = max(SAMPLE_SIZES)
             all_true_samples, all_false_samples = get_samples(problem, max_samples // 2, max_samples // 2)
+            all_true_intervals = None
 
             if noise_std:
                 # We add noise and turn the true samples into intervals for PAC
                 all_true_samples = add_noise(all_true_samples, noise_std)
                 all_false_samples = add_noise(all_false_samples, noise_std)
                 all_true_intervals = create_intervals(problem.domain, all_true_samples,
-                                                      6*math.log(dimensions)*noise_std)
+                                                      6 * math.log(dimensions) * noise_std)
 
             if verbose:
-                print(f"Created {max_samples} samples in {dimensions} dimensions.")
+                print(f"Created {max_samples} samples in {dimensions} dimensions.\n")
 
             # Calculating the true optimal objective value using the underlying problem
             objective_f = create_objective_function(problem)
@@ -360,12 +396,13 @@ def main():
             true_f = optimise_model(true_smtlib_problem)
 
             if verbose:
-                print(f"The true objective value is {true_f}.")
+                print(f"The true objective value is {true_f}.\n")
 
             for j, sample_size in enumerate(SAMPLE_SIZES):
 
                 true_samples = all_true_samples[:sample_size // 2]
                 false_samples = all_false_samples[:sample_size // 2]
+                true_intervals = None
                 if noise_std:
                     true_intervals = all_true_intervals[:sample_size // 2]
 
@@ -421,43 +458,14 @@ def main():
     std_pac_f_errors = np.std(pac_f_errors, axis=2)
 
     # Plotting running times
-    if problem_type in ("simplexn", "cuben"):
-        fig, axs = plt.subplots(1, 3, sharey='all', constrained_layout=True, figsize=(12, 3))
-        for j, ax in enumerate(axs):
-            create_plot(ax, SAMPLE_SIZES, "Sample size", mean_incalp_runtimes[j, :], mean_pac_runtimes[j, :],
-                        std_incalp_runtimes[j, :], std_pac_runtimes[j, :], "IncalP(SMT)", "PAC")
-            ax.title.set_text(f"n: {j + 2}")
-        plt.setp(axs[0], ylabel='Time (s)')
-        axs[0].legend()
-        fig.suptitle(f"{problem.name} running times{noise_string}")
-    else:
-        fig, ax = plt.subplots(figsize=(5, 4))
-        create_plot(ax, SAMPLE_SIZES, "Sample size", mean_incalp_runtimes[0, :], mean_pac_runtimes[0, :],
-                    std_incalp_runtimes[0, :], std_pac_runtimes[0, :], "IncalP(SMT)", "PAC")
-        ax.set_ylabel('Time (s)')
-        ax.legend()
-        fig.suptitle(f"{problem.name} running times{noise_string}")
-    plot_file_times = f"output/{random_string}_{problem.name}_runtimes.pdf"
+    create_plots(problem_type, mean_incalp_runtimes, mean_pac_runtimes, std_incalp_runtimes,std_pac_runtimes,
+                 f"{problem_type} running times{noise_string}", random_string, "Time (s)")
+    plot_file_times = f"output/{random_string}_{problem_type}_runtimes.pdf"
     plt.savefig(plot_file_times)
-
     # Plotting objective value estimates
-    if problem_type in ("simplexn", "cuben"):
-        fig, axs = plt.subplots(1, 3, sharey='all', constrained_layout=True, figsize=(12, 3))
-        for j, ax in enumerate(axs):
-            create_plot(ax, SAMPLE_SIZES, "Sample size", mean_incalp_f_errors[j, :], mean_pac_f_errors[j, :],
-                        std_incalp_f_errors[j, :], std_pac_f_errors[j, :], "IncalP(SMT)", "PAC")
-            ax.title.set_text(f"n: {j + 2}")
-        plt.setp(axs[0], ylabel='Distance from true f')
-        axs[0].legend()
-        fig.suptitle(f"{problem.name} objective value estimates{noise_string}")
-    else:
-        fig, ax = plt.subplots(figsize=(5, 4))
-        create_plot(ax, SAMPLE_SIZES, "Sample size", mean_incalp_f_errors[0, :], mean_pac_f_errors[0, :],
-                    std_incalp_f_errors[0, :], std_pac_f_errors[0, :], "IncalP(SMT)", "PAC")
-        ax.set_ylabel('Distance from true f')
-        ax.legend()
-        fig.suptitle(f"{problem.name} objective value estimates{noise_string}")
-    plot_file_fs = f"output/{random_string}_{problem.name}_f_estimates.pdf"
+    create_plots(problem_type, mean_incalp_f_errors, mean_pac_f_errors, std_incalp_f_errors, std_pac_f_errors,
+                 f"{problem_type} objective value estimates{noise_string}", random_string, "Distance from true f")
+    plot_file_fs = f"output/{random_string}_{problem_type}_fs.pdf"
     plt.savefig(plot_file_fs)
 
     print(f"Finished!\nThe running times plot can be found at {plot_file_times}.\n"

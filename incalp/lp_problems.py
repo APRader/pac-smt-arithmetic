@@ -1,4 +1,5 @@
 # Code taken from Samuel Kolb at https://github.com/samuelkolb/incal/releases
+# CHANGES MADE: replaced the < with a <= on line 82 to eliminate tight bounds that cannot be optimised using reals.
 from pysmt.shortcuts import *
 from .problem import Domain, Problem
 import string
@@ -78,7 +79,7 @@ def cuben(n):
     for i in letters[1:n]:
         r= domain.get_symbol(i)
         constraints.append(r>=normalisation(counter,counter))
-        constraints.append(r<normalisation(counter,(counter+2.7)))
+        constraints.append(r<=normalisation(counter,(counter+2.7)))
         counter=counter+1
 
     theory=And(i for i in constraints)

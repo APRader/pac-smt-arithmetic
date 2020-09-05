@@ -2,7 +2,7 @@
 # All the modules from IncalP are placed in the folder incalp
 
 import argparse
-import math
+# import math
 import random
 import string
 import time
@@ -20,7 +20,7 @@ from incalp.lp_problems import simplexn, cuben, pollutionreduction, police
 from incalp.smt_check import SmtChecker
 
 SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
-NUM_RUNS = 2
+NUM_RUNS = 10
 
 
 def get_samples(problem, num_pos_samples, num_neg_samples):
@@ -270,6 +270,7 @@ def create_plot(ax, x_values, x_label, y1_values, y2_values, y1_error, y2_error,
     :param y2_error: Standard deviation for second set of data.
     :param y1_label: Label for first set of data.
     :param y2_label: Label for second set of data.
+    :param missing_data: Whether the data contains missing values.
     """
     if not missing_data:
         ax.plot(x_values, y1_values, '--', label=y1_label)
@@ -293,6 +294,7 @@ def create_plots(problem_name, means_incalp, means_pac, stds_incalp, stds_pac, t
     :param stds_pac: Array of standard deviation values for PAC.
     :param title: Title for the graph.
     :param y_label: Y-axis label.
+    :param missing_data: Whether the data contains missing values.
     """
     if problem_name in ("simplexn", "cuben"):
         fig, axs = plt.subplots(1, 3, sharey='all', constrained_layout=True, figsize=(12, 3))
@@ -398,14 +400,14 @@ def main():
 
                 # 50% positive and 50% negative samples
                 true_samples, false_samples = get_samples(problem, sample_size // 2, sample_size // 2)
-                true_intervals = None
+                # true_intervals = None
 
                 if noise_std:
                     # We add noise and turn the true samples into intervals for PAC
                     true_samples = add_noise(true_samples, noise_std)
                     false_samples = add_noise(false_samples, noise_std)
-                    true_intervals = create_intervals(problem.domain, true_samples,
-                                                      6 * math.log(dimensions) * noise_std)
+                    # true_intervals = create_intervals(problem.domain, true_samples,
+                    #                                   6 * math.log(dimensions) * noise_std)
 
                 if verbose:
                     print(f"\t\tCreated {sample_size} samples in {dimensions} dimensions.")
@@ -449,8 +451,8 @@ def main():
                 tec = time.perf_counter()
                 if noise_std:
                     pac_estimated_f = run_pac(true_samples, objective_f, optimisation_goal, validity=0.95)
-                    #pac_estimated_f = run_pac(true_intervals, objective_f, optimisation_goal,
-                    #                          validity=0.95, intervals=True)
+                    # pac_estimated_f = run_pac(true_intervals, objective_f, optimisation_goal,
+                    #                           validity=0.95, intervals=True)
                 else:
                     pac_estimated_f = run_pac(true_samples, objective_f, optimisation_goal)
                 tyc = time.perf_counter()

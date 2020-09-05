@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pysmt.shortcuts import And, is_sat
 from z3 import Optimize, Z3Exception
-from fractions import Fraction as frac
+from fractions import Fraction
 
 from incalp.dt_selection import get_distances
 from incalp.incalpsmt import LPLearner
@@ -20,7 +20,7 @@ from incalp.lp_problems import simplexn, cuben, pollutionreduction, police
 from incalp.smt_check import SmtChecker
 
 SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
-NUM_RUNS = 10
+NUM_RUNS = 2
 
 
 def get_samples(problem, num_pos_samples, num_neg_samples):
@@ -68,7 +68,6 @@ def run_incalp(domain, samples, num_half_spaces):
         model = learner.learn(domain, samples, initial_indices)
     except Z3Exception:
         # IncalP could not find a model
-        print("\t\tIncalP could not find a model.")
         return None
     return model
 
@@ -239,8 +238,8 @@ def run_pac(samples, objective_f, goal="maximise", validity=1.0, accuracy=60, in
             upper = bound
 
     # Converting the bounds into fractions to allow for exact representations
-    upper = frac(upper)
-    lower = frac(lower)
+    upper = Fraction(upper)
+    lower = Fraction(lower)
 
     # Finding tight bounds for optimal objective value using binary search
     for i in range(accuracy):
@@ -258,7 +257,8 @@ def run_pac(samples, objective_f, goal="maximise", validity=1.0, accuracy=60, in
         return pac_estimated_f
 
 
-def create_plot(ax, x_values, x_label, y1_values, y2_values, y1_error, y2_error, y1_label, y2_label):
+def create_plot(ax, x_values, x_label, y1_values, y2_values, y1_error, y2_error, y1_label, y2_label,
+                missing_data=False):
     """
     Create line graph for two sets of values.
     :param ax: Axis object.
@@ -271,14 +271,19 @@ def create_plot(ax, x_values, x_label, y1_values, y2_values, y1_error, y2_error,
     :param y1_label: Label for first set of data.
     :param y2_label: Label for second set of data.
     """
-    ax.plot(x_values, y1_values, '--', label=y1_label)
-    ax.plot(x_values, y2_values, label=y2_label)
-    ax.fill_between(x_values, y1_values - y1_error, y1_values + y1_error, alpha=0.3)
-    ax.fill_between(x_values, y2_values - y2_error, y2_values + y2_error, alpha=0.3)
+    if not missing_data:
+        ax.plot(x_values, y1_values, '--', label=y1_label)
+        ax.plot(x_values, y2_values, label=y2_label)
+        ax.fill_between(x_values, y1_values - y1_error, y1_values + y1_error, alpha=0.3)
+        ax.fill_between(x_values, y2_values - y2_error, y2_values + y2_error, alpha=0.3)
+    else:
+        # Using bars rather than filled sections to show standard deviation for disconnected data points
+        ax.errorbar(x_values, y1_values, yerr=y1_error, label=y1_label, fmt='o--')
+        ax.errorbar(x_values, y2_values, yerr=y2_error, label=y2_label, fmt='x-')
     ax.set_xlabel(x_label)
 
 
-def create_plots(problem_name, means_incalp, means_pac, stds_incalp, stds_pac, title, y_label):
+def create_plots(problem_name, means_incalp, means_pac, stds_incalp, stds_pac, title, y_label, missing_data=False):
     """
     Create comparison plots between IncalP and PAC
     :param problem_name: Name of the problem.
@@ -293,7 +298,7 @@ def create_plots(problem_name, means_incalp, means_pac, stds_incalp, stds_pac, t
         fig, axs = plt.subplots(1, 3, sharey='all', constrained_layout=True, figsize=(12, 3))
         for j, ax in enumerate(axs):
             create_plot(ax, SAMPLE_SIZES, "Sample size", means_incalp[j, :], means_pac[j, :],
-                        stds_incalp[j, :], stds_pac[j, :], "IncalP(SMT)", "PAC")
+                        stds_incalp[j, :], stds_pac[j, :], "IncalP(SMT)", "PAC", missing_data)
             ax.title.set_text(f"n: {j + 2}")
         plt.setp(axs[0], ylabel=y_label)
         axs[0].legend()
@@ -301,7 +306,7 @@ def create_plots(problem_name, means_incalp, means_pac, stds_incalp, stds_pac, t
     elif problem_name in ("pollution", "police"):
         fig, ax = plt.subplots(figsize=(5, 4))
         create_plot(ax, SAMPLE_SIZES, "Sample size", means_incalp[0, :], means_pac[0, :],
-                    stds_incalp[0, :], stds_pac[0, :], "IncalP(SMT)", "PAC")
+                    stds_incalp[0, :], stds_pac[0, :], "IncalP(SMT)", "PAC", missing_data)
         ax.set_ylabel(y_label)
         ax.legend()
         fig.suptitle(title)
@@ -332,6 +337,10 @@ def main():
     all_dimensions = None
     optimisation_goal = None
     problem = None
+    # Number of times IncalP could not find a model
+    num_incalp_exceptions = 0
+    # Whether plotting data is incomplete
+    incomplete_data = False
 
     if problem_type in ("simplexn", "cuben"):
         all_dimensions = [2, 3, 4]
@@ -413,18 +422,28 @@ def main():
                 tic = time.perf_counter()
                 model = run_incalp(problem.domain, true_samples + false_samples, num_constraints)
                 toc = time.perf_counter()
-                # Using IncalP's model to calculate optimal objective value
-                smtlib_problem = convert_to_smtlib(model, problem.domain, objective_f, optimisation_goal)
-                tuc = time.perf_counter()
-                incalp_estimated_f = optimise_model(smtlib_problem)
-                tac = time.perf_counter()
-                # Time IncalP took to create the model and find optimal objective value
-                incalp_runtimes[i, j, run] = (toc - tic) + (tac - tuc)
-                incalp_f_errors[i, j, run] = np.abs(incalp_estimated_f - true_f)
+                if model:
+                    # Using IncalP's model to calculate optimal objective value
+                    smtlib_problem = convert_to_smtlib(model, problem.domain, objective_f, optimisation_goal)
+                    tuc = time.perf_counter()
+                    incalp_estimated_f = optimise_model(smtlib_problem)
+                    tac = time.perf_counter()
+                    # Time IncalP took to create the model and find optimal objective value
+                    incalp_runtimes[i, j, run] = (toc - tic) + (tac - tuc)
+                    incalp_f_errors[i, j, run] = np.abs(incalp_estimated_f - true_f)
+                    incalp_time = (toc - tic) + (tac - tuc)
 
-                if verbose:
-                    print(f"\t\tIncalP took {toc - tic:0.2f} + {tac - tuc:0.2f} seconds.")
-                    print(f"\t\tIncalP-estimated objective value: {incalp_estimated_f}.")
+                    if verbose:
+                        print(f"\t\tIncalP took {toc - tic:0.2f} + {tac - tuc:0.2f} seconds.")
+                        print(f"\t\tIncalP-estimated objective value: {incalp_estimated_f}.")
+                else:
+                    print("\t\tIncalP could not find a model.")
+                    incomplete_data = True
+                    num_incalp_exceptions += 1
+                    incalp_runtimes[i, j, run] = None
+                    incalp_f_errors[i, j, run] = None
+                    incalp_estimated_f = "No model found"
+                    incalp_time = toc - tic
 
                 # Using implicit learning with PAC to find the optimal objective value
                 tec = time.perf_counter()
@@ -447,7 +466,7 @@ def main():
                                f"True f: {true_f}\n"
                                f"IncalP f: {incalp_estimated_f}\n"
                                f"PAC f: {pac_estimated_f}\n"
-                               f"IncalP time: {(toc - tic) + (tac - tuc)} seconds\n"
+                               f"IncalP time: {incalp_time} seconds\n"
                                f"PAC time: {tyc - tec} seconds\n\n")
                 log_file.close()
 
@@ -463,14 +482,22 @@ def main():
 
     # Plotting running times
     create_plots(problem_type, mean_incalp_runtimes, mean_pac_runtimes, std_incalp_runtimes, std_pac_runtimes,
-                 f"{problem_type} running times{noise_string}", "Time (s)")
+                 f"{problem_type} running times{noise_string}", "Time (s)", incomplete_data)
     plot_file_times = f"output/{random_string}_{problem_type}_runtimes.pdf"
     plt.savefig(plot_file_times)
     # Plotting objective value estimates
     create_plots(problem_type, mean_incalp_f_errors, mean_pac_f_errors, std_incalp_f_errors, std_pac_f_errors,
-                 f"{problem_type} objective value estimates{noise_string}", "Distance from true f")
+                 f"{problem_type} objective value estimates{noise_string}", "Distance from true f", incomplete_data)
     plot_file_fs = f"output/{random_string}_{problem_type}_fs.pdf"
     plt.savefig(plot_file_fs)
+
+    if not num_incalp_exceptions == 0:
+        print(f"IncalP failed to find a model {num_incalp_exceptions} out of "
+              f"{NUM_RUNS * len(SAMPLE_SIZES) * len(all_dimensions)} times.")
+        log_file = open(log_path, "a")
+        log_file.write(f"IncalP failed models: {num_incalp_exceptions} out of "
+                       f"{NUM_RUNS * len(SAMPLE_SIZES) * len(all_dimensions)}")
+        log_file.close()
 
     print(f"Finished!\nThe running times plot can be found at {plot_file_times}.\n"
           f"The objective value plot at {plot_file_fs}.")

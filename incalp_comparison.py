@@ -2,7 +2,7 @@
 # All the modules from IncalP are placed in the folder incalp
 
 import argparse
-# import math
+import math
 import random
 import string
 import time
@@ -20,7 +20,7 @@ from incalp.lp_problems import simplexn, cuben, pollutionreduction, police
 from incalp.smt_check import SmtChecker
 
 SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
-NUM_RUNS = 10
+NUM_RUNS = 2
 
 
 def get_samples(problem, num_pos_samples, num_neg_samples):
@@ -400,14 +400,14 @@ def main():
 
                 # 50% positive and 50% negative samples
                 true_samples, false_samples = get_samples(problem, sample_size // 2, sample_size // 2)
-                # true_intervals = None
+                true_intervals = None
 
                 if noise_std:
                     # We add noise and turn the true samples into intervals for PAC
-                    true_samples = add_noise(true_samples, noise_std)
-                    false_samples = add_noise(false_samples, noise_std)
-                    # true_intervals = create_intervals(problem.domain, true_samples,
-                    #                                   6 * math.log(dimensions) * noise_std)
+                    true_samples = add_noise(true_samples, noise_std*(1/(math.sqrt(dimensions))))
+                    false_samples = add_noise(false_samples, noise_std*(1/(math.sqrt(dimensions))))
+                    true_intervals = create_intervals(problem.domain, true_samples,
+                                                      4 * math.log(dimensions) * noise_std / math.sqrt(dimensions))
 
                 if verbose:
                     print(f"\t\tCreated {sample_size} samples in {dimensions} dimensions.")
@@ -450,9 +450,9 @@ def main():
                 # Using implicit learning with PAC to find the optimal objective value
                 tec = time.perf_counter()
                 if noise_std:
-                    pac_estimated_f = run_pac(true_samples, objective_f, optimisation_goal, validity=0.95)
-                    # pac_estimated_f = run_pac(true_intervals, objective_f, optimisation_goal,
-                    #                           validity=0.95, intervals=True)
+                    # pac_estimated_f = run_pac(true_samples, objective_f, optimisation_goal, validity=0.95)
+                    pac_estimated_f = run_pac(true_intervals, objective_f, optimisation_goal,
+                                              validity=0.95, intervals=True)
                 else:
                     pac_estimated_f = run_pac(true_samples, objective_f, optimisation_goal)
                 tyc = time.perf_counter()

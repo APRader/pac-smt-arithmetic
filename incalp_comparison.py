@@ -20,7 +20,7 @@ from incalp.lp_problems import simplexn, cuben, pollutionreduction, police
 from incalp.smt_check import SmtChecker
 
 SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
-NUM_RUNS = 2
+NUM_RUNS = 10
 
 
 def get_samples(problem, num_pos_samples, num_neg_samples):

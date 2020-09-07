@@ -6,6 +6,7 @@ import math
 import random
 import string
 import time
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -169,6 +170,25 @@ def add_noise(samples, noise_std):
             for sample in samples]
 
 
+def add_outliers(true_samples, false_samples, outlier_ratio):
+    """
+    Add outliers to data by swapping samples from true to false and vice-versa.
+    :param true_samples: List of true samples.
+    :param false_samples: List of false_samples.
+    :param outlier_ratio: The ratio of outliers, between 0 and 1.
+    :return: True and false samples with outliers among them.
+    """
+    num_samples = len(true_samples) + len(false_samples)
+    # Index at which to add outliers
+    outlier_index = int((num_samples - (num_samples * outlier_ratio)) / 2)
+    true_samples_outliers = true_samples[:outlier_index] + false_samples[outlier_index:]
+    false_samples_outliers = false_samples[:outlier_index] + true_samples[outlier_index:]
+    # Turning labels into their corresponding value
+    true_samples_outliers = [(sample[0], True) for sample in true_samples_outliers]
+    false_samples_outliers = [(sample[0], False) for sample in false_samples_outliers]
+    return true_samples_outliers, false_samples_outliers
+
+
 def pac_learning(samples, query, validity, intervals=False):
     """
     Run DecidePAC to determine whether the samples satisfy the query.
@@ -322,6 +342,7 @@ def main():
                         help="choose the type of problem to run the experiments on")
     parser.add_argument("-s", "--seed", type=int, help="the seed for the random number generator")
     parser.add_argument("-n", "--noise", type=float, help="add Gaussian noise to samples with given standard deviation")
+    parser.add_argument("-o", "--outliers", type=float, help="ratio of outliers, between 0 and 1")
     parser.add_argument("-v", "--verbose", action="store_true", help="turn on verbose mode")
     args = parser.parse_args()
 
@@ -329,12 +350,17 @@ def main():
     verbose = args.verbose
     noise_std = args.noise
     seed = args.seed
+    outlier_ratio = args.outliers
 
-    # Creating a remark about the noise used for the plot titles later
+    # Creating a remark about the noise and outliers used for the plot titles later
     if noise_std:
         noise_string = f", noise: {noise_std}"
     else:
         noise_string = ""
+    if outlier_ratio:
+        outlier_string = f", outliers: {outlier_ratio}"
+    else:
+        outlier_string = ""
 
     all_dimensions = None
     optimisation_goal = None
@@ -402,10 +428,14 @@ def main():
                 true_samples, false_samples = get_samples(problem, sample_size // 2, sample_size // 2)
                 true_intervals = None
 
+                if outlier_ratio:
+                    # We turn some of the negative samples into positive samples, making them outliers
+                    true_samples, false_samples = add_outliers(true_samples, false_samples, outlier_ratio)
+
                 if noise_std:
                     # We add noise and turn the true samples into intervals for PAC
-                    true_samples = add_noise(true_samples, noise_std*(1/(math.sqrt(dimensions))))
-                    false_samples = add_noise(false_samples, noise_std*(1/(math.sqrt(dimensions))))
+                    true_samples = add_noise(true_samples, noise_std / math.sqrt(dimensions))
+                    false_samples = add_noise(false_samples, noise_std / math.sqrt(dimensions))
                     true_intervals = create_intervals(problem.domain, true_samples,
                                                       4 * math.log(dimensions) * noise_std / math.sqrt(dimensions))
 
@@ -449,8 +479,10 @@ def main():
 
                 # Using implicit learning with PAC to find the optimal objective value
                 tec = time.perf_counter()
-                if noise_std:
-                    # pac_estimated_f = run_pac(true_samples, objective_f, optimisation_goal, validity=0.95)
+                if outlier_ratio:
+                    pac_estimated_f = run_pac(true_samples, objective_f, optimisation_goal,
+                                              validity=1-outlier_ratio)
+                elif noise_std:
                     pac_estimated_f = run_pac(true_intervals, objective_f, optimisation_goal,
                                               validity=0.95, intervals=True)
                 else:
@@ -473,23 +505,28 @@ def main():
                 log_file.close()
 
     # Calculating mean and standard deviation of all the running times and objective estimate errors
-    mean_incalp_runtimes = np.mean(incalp_runtimes, axis=2)
-    mean_pac_runtimes = np.mean(pac_runtimes, axis=2)
-    std_incalp_runtimes = np.std(incalp_runtimes, axis=2)
-    std_pac_runtimes = np.std(pac_runtimes, axis=2)
-    mean_incalp_f_errors = np.mean(incalp_f_errors, axis=2)
-    mean_pac_f_errors = np.mean(pac_f_errors, axis=2)
-    std_incalp_f_errors = np.std(incalp_f_errors, axis=2)
-    std_pac_f_errors = np.std(pac_f_errors, axis=2)
+    with warnings.catch_warnings():
+        # We expect NaN warnings, as IncalP might not find a model
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        mean_incalp_runtimes = np.nanmean(incalp_runtimes, axis=2)
+        mean_pac_runtimes = np.nanmean(pac_runtimes, axis=2)
+        std_incalp_runtimes = np.nanstd(incalp_runtimes, axis=2)
+        std_pac_runtimes = np.nanstd(pac_runtimes, axis=2)
+        mean_incalp_f_errors = np.nanmean(incalp_f_errors, axis=2)
+        mean_pac_f_errors = np.nanmean(pac_f_errors, axis=2)
+        std_incalp_f_errors = np.nanstd(incalp_f_errors, axis=2)
+        std_pac_f_errors = np.nanstd(pac_f_errors, axis=2)
 
     # Plotting running times
     create_plots(problem_type, mean_incalp_runtimes, mean_pac_runtimes, std_incalp_runtimes, std_pac_runtimes,
-                 f"{problem_type} running times{noise_string}", "Time (s)", incomplete_data)
+                 f"{problem_type} running times{noise_string}{outlier_string}", "Time (s)", incomplete_data)
     plot_file_times = f"output/{random_string}_{problem_type}_runtimes.pdf"
     plt.savefig(plot_file_times)
+
     # Plotting objective value estimates
     create_plots(problem_type, mean_incalp_f_errors, mean_pac_f_errors, std_incalp_f_errors, std_pac_f_errors,
-                 f"{problem_type} objective value estimates{noise_string}", "Distance from true f", incomplete_data)
+                 f"{problem_type} objective value estimates{noise_string}{outlier_string}", "Distance from true f",
+                 incomplete_data)
     plot_file_fs = f"output/{random_string}_{problem_type}_fs.pdf"
     plt.savefig(plot_file_fs)
 

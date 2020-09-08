@@ -1,5 +1,5 @@
 # This code uses functions taken from https://github.com/samuelkolb/incal/releases
-# All the modules from IncalP are placed in the folder incalp
+# All the modules from IncaLP are placed in the folder incalp
 
 import argparse
 import math
@@ -53,13 +53,13 @@ def get_samples(problem, num_pos_samples, num_neg_samples):
 
 def run_incalp(domain, samples, num_half_spaces):
     """
-    Run IncalP with an LPLearner to learn a model given the samples incrementally.
+    Run IncaLP with an LPLearner to learn a model given the samples incrementally.
     :param domain: The domain of each variable.
     :param samples: A list of positive and/or negative samples of the problem.
     :param num_half_spaces: The number of half-spaces the learned model should contain.
     :return: The learned model.
     """
-    # Starting with 20 random samples, the standard in the original IncalP code
+    # Starting with 20 random samples, the standard in the original IncaLP code
     initial_indices = random.sample(range(len(samples)), 20)
     # Choosing the SelectDT heuristic, which is called MaxViolationsStrategy
     weights = [min(d.values()) for d in get_distances(domain, samples)]
@@ -68,7 +68,7 @@ def run_incalp(domain, samples, num_half_spaces):
     try:
         model = learner.learn(domain, samples, initial_indices)
     except Z3Exception:
-        # IncalP could not find a model
+        # IncaLP could not find a model
         return None
     return model
 
@@ -154,9 +154,12 @@ def create_intervals(domain, samples, width):
     :param width: Width of interval.
     :return: List of PySMT formulas of each sample as intervals centered at the original assignment.
     """
-    return [And([And(domain.get_symbol(variable) >= sample[0][variable] - width / 2,
-                     domain.get_symbol(variable) <= sample[0][variable] + width / 2) for variable in sample[0]])
-            for sample in samples]
+    # Capping the intervals at the domain mins/maxs
+    return [And([And(domain.get_symbol(variable) >=
+                     max(domain.var_domains[variable][0], sample[0][variable] - (width / 2)),
+                     domain.get_symbol(variable) <=
+                     min(domain.var_domains[variable][1], sample[0][variable] + (width / 2)))
+                 for variable in sample[0]]) for sample in samples]
 
 
 def add_noise(samples, noise_std):
@@ -166,8 +169,9 @@ def add_noise(samples, noise_std):
     :param noise_std: Standard deviation of Gaussian noise.
     :return: Noisy samples.
     """
-    return [({key: value + np.random.normal(0, noise_std) for key, value in sample[0].items()}, sample[1])
-            for sample in samples]
+    # Noisy points are capped at domain boundaries
+    return [({key: max(min(value + np.random.normal(0, noise_std), 1), 0) for key, value in sample[0].items()},
+             sample[1]) for sample in samples]
 
 
 def add_outliers(true_samples, false_samples, outlier_ratio):
@@ -207,7 +211,7 @@ def pac_learning(samples, query, validity, intervals=False):
                 num_true_samples += 1
     else:
         for sample in samples:
-            # Assignments have a special format that can be read by the check function from the IncalP code
+            # Assignments have a special format that can be read by the check function from the IncaLP code
             if SmtChecker(sample[0]).check(query):
                 num_true_samples += 1
 
@@ -306,11 +310,11 @@ def create_plot(ax, x_values, x_label, y1_values, y2_values, y1_error, y2_error,
 
 def create_plots(problem_name, means_incalp, means_pac, stds_incalp, stds_pac, title, y_label, missing_data=False):
     """
-    Create comparison plots between IncalP and PAC
+    Create comparison plots between IncaLP and PAC
     :param problem_name: Name of the problem.
-    :param means_incalp: Array of mean values for IncalP.
+    :param means_incalp: Array of mean values for IncaLP.
     :param means_pac: Array of mean values for PAC.
-    :param stds_incalp: Array of standard deviation values for IncalP.
+    :param stds_incalp: Array of standard deviation values for IncaLP.
     :param stds_pac: Array of standard deviation values for PAC.
     :param title: Title for the graph.
     :param y_label: Y-axis label.
@@ -320,7 +324,7 @@ def create_plots(problem_name, means_incalp, means_pac, stds_incalp, stds_pac, t
         fig, axs = plt.subplots(1, 3, sharey='all', constrained_layout=True, figsize=(12, 3))
         for j, ax in enumerate(axs):
             create_plot(ax, SAMPLE_SIZES, "Sample size", means_incalp[j, :], means_pac[j, :],
-                        stds_incalp[j, :], stds_pac[j, :], "IncalP(SMT)", "PAC", missing_data)
+                        stds_incalp[j, :], stds_pac[j, :], "IncaLP(SMT)", "PAC", missing_data)
             ax.title.set_text(f"n: {j + 2}")
         plt.setp(axs[0], ylabel=y_label)
         axs[0].legend()
@@ -328,7 +332,7 @@ def create_plots(problem_name, means_incalp, means_pac, stds_incalp, stds_pac, t
     elif problem_name in ("pollution", "police"):
         fig, ax = plt.subplots(figsize=(5, 4))
         create_plot(ax, SAMPLE_SIZES, "Sample size", means_incalp[0, :], means_pac[0, :],
-                    stds_incalp[0, :], stds_pac[0, :], "IncalP(SMT)", "PAC", missing_data)
+                    stds_incalp[0, :], stds_pac[0, :], "IncaLP(SMT)", "PAC", missing_data)
         ax.set_ylabel(y_label)
         ax.legend()
         fig.suptitle(title)
@@ -365,7 +369,7 @@ def main():
     all_dimensions = None
     optimisation_goal = None
     problem = None
-    # Number of times IncalP could not find a model
+    # Number of times IncaLP could not find a model
     num_incalp_exceptions = 0
     # Whether plotting data is incomplete
     incomplete_data = False
@@ -404,10 +408,6 @@ def main():
             print(f"\tStarting run {run + 1} out of {NUM_RUNS}.")
 
             for i, dimensions in enumerate(all_dimensions):
-                log_file = open(log_path, "a+")
-                log_file.write(f"DIMENSIONS: {dimensions}\n")
-                log_file.close()
-
                 num_constraints = None
 
                 if problem_type == "simplexn":
@@ -450,26 +450,26 @@ def main():
                 if verbose:
                     print(f"\t\tThe true objective value is {true_f}.")
 
-                # Creating a model with IncalP using examples
+                # Creating a model with IncaLP using examples
                 tic = time.perf_counter()
                 model = run_incalp(problem.domain, true_samples + false_samples, num_constraints)
                 toc = time.perf_counter()
                 if model:
-                    # Using IncalP's model to calculate optimal objective value
+                    # Using IncaLP's model to calculate optimal objective value
                     smtlib_problem = convert_to_smtlib(model, problem.domain, objective_f, optimisation_goal)
                     tuc = time.perf_counter()
                     incalp_estimated_f = optimise_model(smtlib_problem)
                     tac = time.perf_counter()
-                    # Time IncalP took to create the model and find optimal objective value
+                    # Time IncaLP took to create the model and find optimal objective value
                     incalp_runtimes[i, j, run] = (toc - tic) + (tac - tuc)
                     incalp_f_errors[i, j, run] = np.abs(incalp_estimated_f - true_f)
                     incalp_time = (toc - tic) + (tac - tuc)
 
                     if verbose:
-                        print(f"\t\tIncalP took {toc - tic:0.2f} + {tac - tuc:0.2f} seconds.")
-                        print(f"\t\tIncalP-estimated objective value: {incalp_estimated_f}.")
+                        print(f"\t\tIncaLP took {toc - tic:0.2f} + {tac - tuc:0.2f} seconds.")
+                        print(f"\t\tIncaLP-estimated objective value: {incalp_estimated_f}.")
                 else:
-                    print("\t\tIncalP could not find a model.")
+                    print("\t\tIncaLP could not find a model.")
                     incomplete_data = True
                     num_incalp_exceptions += 1
                     incalp_runtimes[i, j, run] = None
@@ -495,18 +495,19 @@ def main():
                     print(f"\t\tPAC took {tyc - tec:0.2f} seconds.")
                     print(f"\t\tPAC-estimated objective value: {pac_estimated_f}.\n")
 
-                log_file = open(log_path, "a")
-                log_file.write(f"SAMPLES: {sample_size}\n"
+                log_file = open(log_path, "a+")
+                log_file.write(f"DIMENSIONS: {dimensions}\n"
+                               f"SAMPLES: {sample_size}\n"
                                f"True f: {true_f}\n"
-                               f"IncalP f: {incalp_estimated_f}\n"
+                               f"IncaLP f: {incalp_estimated_f}\n"
                                f"PAC f: {pac_estimated_f}\n"
-                               f"IncalP time: {incalp_time} seconds\n"
+                               f"IncaLP time: {incalp_time} seconds\n"
                                f"PAC time: {tyc - tec} seconds\n\n")
                 log_file.close()
 
     # Calculating mean and standard deviation of all the running times and objective estimate errors
     with warnings.catch_warnings():
-        # We expect NaN warnings, as IncalP might not find a model
+        # We expect NaN warnings, as IncaLP might not find a model
         warnings.simplefilter("ignore", category=RuntimeWarning)
         mean_incalp_runtimes = np.nanmean(incalp_runtimes, axis=2)
         mean_pac_runtimes = np.nanmean(pac_runtimes, axis=2)
@@ -531,10 +532,10 @@ def main():
     plt.savefig(plot_file_fs)
 
     if not num_incalp_exceptions == 0:
-        print(f"IncalP failed to find a model {num_incalp_exceptions} out of "
+        print(f"IncaLP failed to find a model {num_incalp_exceptions} out of "
               f"{NUM_RUNS * len(SAMPLE_SIZES) * len(all_dimensions)} times.")
         log_file = open(log_path, "a")
-        log_file.write(f"IncalP failed models: {num_incalp_exceptions} out of "
+        log_file.write(f"IncaLP failed models: {num_incalp_exceptions} out of "
                        f"{NUM_RUNS * len(SAMPLE_SIZES) * len(all_dimensions)}")
         log_file.close()
 

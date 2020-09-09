@@ -19,6 +19,7 @@ from incalp.incalpsmt import LPLearner
 from incalp.incremental_learner import MaxViolationsStrategy
 from incalp.lp_problems import simplexn, cuben, pollutionreduction, police
 from incalp.smt_check import SmtChecker
+from incalp.timeout import timeout
 
 SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
 NUM_RUNS = 10
@@ -51,12 +52,13 @@ def get_samples(problem, num_pos_samples, num_neg_samples):
     return true_samples, false_samples
 
 
-def run_incalp(domain, samples, num_half_spaces):
+def run_incalp(domain, samples, num_half_spaces, timeout_duration=None):
     """
     Run IncaLP with an LPLearner to learn a model given the samples incrementally.
     :param domain: The domain of each variable.
     :param samples: A list of positive and/or negative samples of the problem.
     :param num_half_spaces: The number of half-spaces the learned model should contain.
+    :param timeout_duration: Number of seconds after IncaLP times out.
     :return: The learned model.
     """
     # Starting with 20 random samples, the standard in the original IncaLP code
@@ -66,7 +68,10 @@ def run_incalp(domain, samples, num_half_spaces):
     selection_strategy = MaxViolationsStrategy(1, weights)
     learner = LPLearner(num_half_spaces, selection_strategy)
     try:
-        model = learner.learn(domain, samples, initial_indices)
+        if timeout:
+            model = timeout(learner.learn, [domain, samples, initial_indices], duration=timeout_duration)
+        else:
+            model = learner.learn(domain, samples, initial_indices)
     except Z3Exception:
         # IncaLP could not find a model
         return None
@@ -347,6 +352,8 @@ def main():
     parser.add_argument("-s", "--seed", type=int, help="the seed for the random number generator")
     parser.add_argument("-n", "--noise", type=float, help="add Gaussian noise to samples with given standard deviation")
     parser.add_argument("-o", "--outliers", type=float, help="ratio of outliers, between 0 and 1")
+    parser.add_argument("-t", "--timeout", type=int,
+                        help="Timeout for IncaLP in seconds. Only works on Unix-based systems.")
     parser.add_argument("-v", "--verbose", action="store_true", help="turn on verbose mode")
     args = parser.parse_args()
 
@@ -355,6 +362,7 @@ def main():
     noise_std = args.noise
     seed = args.seed
     outlier_ratio = args.outliers
+    incalp_timeout = args.timeout
 
     # Creating a remark about the noise and outliers used for the plot titles later
     if noise_std:
@@ -452,7 +460,7 @@ def main():
 
                 # Creating a model with IncaLP using examples
                 tic = time.perf_counter()
-                model = run_incalp(problem.domain, true_samples + false_samples, num_constraints)
+                model = run_incalp(problem.domain, true_samples + false_samples, num_constraints, incalp_timeout)
                 toc = time.perf_counter()
                 if model:
                     # Using IncaLP's model to calculate optimal objective value

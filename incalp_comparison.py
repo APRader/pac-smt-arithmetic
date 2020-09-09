@@ -350,10 +350,12 @@ def main():
     parser.add_argument("problem", choices=["simplexn", "cuben", "pollution", "police"],
                         help="choose the type of problem to run the experiments on")
     parser.add_argument("-s", "--seed", type=int, help="the seed for the random number generator")
-    parser.add_argument("-n", "--noise", type=float, help="add Gaussian noise to samples with given standard deviation")
+    parser.add_argument("-n", "--noise", type=float,
+                        help="add Gaussian noise to samples with given standard deviation,"
+                             " normalised by number of dimensions")
     parser.add_argument("-o", "--outliers", type=float, help="ratio of outliers, between 0 and 1")
     parser.add_argument("-t", "--timeout", type=int,
-                        help="Timeout for IncaLP in seconds. Only works on Unix-based systems.")
+                        help="timeout for IncaLP in seconds, only works on Unix-based systems.")
     parser.add_argument("-v", "--verbose", action="store_true", help="turn on verbose mode")
     args = parser.parse_args()
 
@@ -395,7 +397,7 @@ def main():
     # Creating a random log file name before seed is set
     characters = string.ascii_letters + string.digits
     random_string = ''.join((random.choice(characters) for _ in range(5)))
-    log_path = f"output/{random_string}_incalp_comparison_log_{problem_type}.txt"
+    log_path = f"output/{random_string}_{problem_type}_log.txt"
     print(f"Log file: {log_path}")
 
     # Setting the seed for random number generators

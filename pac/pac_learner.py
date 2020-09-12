@@ -3,8 +3,9 @@ import math
 
 
 class PACLearner:
-    def __init__(self, knowledge_base=True):
+    def __init__(self, knowledge_base=True, domain=None):
         self.knowledge_base = knowledge_base
+        self.domain = domain
 
     def decide_pac(self, examples, query, validity=1, return_actual_validity=False):
         """

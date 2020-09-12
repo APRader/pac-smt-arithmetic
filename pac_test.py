@@ -1,7 +1,8 @@
 import unittest
 
-from pac import pac_learner
-from z3 import Ints, Real, Bool
+from z3 import Int, Ints, Real, Bool, And, Solver, unsat
+
+from pac import pac_learner, interval
 
 
 class TestPAC(unittest.TestCase):
@@ -45,8 +46,69 @@ class TestPAC(unittest.TestCase):
         Test that DecidePAC asserts that the validity is between 0 and 1.
         """
         learner = pac_learner.PACLearner()
+        # Wrong value should raise ValueError
         with self.assertRaises(ValueError):
             learner.decide_pac([], True, -1)
+
+    def test_interval_assignment(self):
+        """
+        Test that you can create an Interval object that is an assignment.
+        """
+        ass = interval.Interval(23)
+        x = Int("x")
+        formula = ass.create_formula(x)
+        s = Solver()
+        s.add(formula != (x == 23))
+        # Check that the formulas are equivalent
+        self.assertEqual(s.check(), unsat)
+
+    def test_interval_tuple(self):
+        """
+        Test that you can create an open interval using a tuple.
+        """
+        open_interval = interval.Interval((-2, 0))
+        x = Int("x")
+        formula = open_interval.create_formula(x)
+        s = Solver()
+        s.add(formula != And(x > -2, x < 0))
+        # Check that the formulas are equivalent
+        self.assertEqual(s.check(), unsat)
+
+    def test_interval_list(self):
+        """
+        Test that you can create a closed interval using a list.
+        """
+        closed_interval = interval.Interval([-3.8, 8.9])
+        x = Real("x")
+        formula = closed_interval.create_formula(x)
+        s = Solver()
+        s.add(formula != And(x >= -3.8, x <= 8.9))
+        # Check that the formulas are equivalent
+        self.assertEqual(s.check(), unsat)
+
+    def test_interval_string(self):
+        """
+        Test that you can create a mixed interval using a string.
+        """
+        mixed_interval = interval.Interval("(-inf,-3]")
+        x = Int("x")
+        formula = mixed_interval.create_formula(x)
+        s = Solver()
+        s.add(formula != And(x <= -3))
+        # Check that the formulas are equivalent
+        self.assertEqual(s.check(), unsat)
+
+    def test_interval_kwargs(self):
+        """
+        Test that you can create a mixed interval using keyword arguments.
+        """
+        mixed_interval = interval.Interval(lower=4.9, lower_bound="closed", upper=float("inf"), upper_bound="open")
+        x = Int("x")
+        formula = mixed_interval.create_formula(x)
+        s = Solver()
+        s.add(formula != And(x >= 4.9))
+        # Check that the formulas are equivalent
+        self.assertEqual(s.check(), unsat)
 
 
 if __name__ == '__main__':

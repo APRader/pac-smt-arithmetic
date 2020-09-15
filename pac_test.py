@@ -1,8 +1,8 @@
 import unittest
 
-from z3 import Int, Ints, Real, Bool, And, Solver, unsat
+from z3 import Int, Ints, Real, Reals, Bool, And, Solver, unsat
 
-from pac import pac_learner, interval
+from pac import pac_learner, interval, domain
 
 
 class TestPAC(unittest.TestCase):
@@ -109,6 +109,16 @@ class TestPAC(unittest.TestCase):
         s.add(formula != And(x >= 4.9))
         # Check that the formulas are equivalent
         self.assertEqual(s.check(), unsat)
+
+    def test_add_domain(self):
+        """
+        Test that you can add a domain to your existing domains.
+        """
+        x, y = Reals("x y")
+        x_domain = interval.Interval("(-2.4,3.1]")
+        y_domain = interval.Interval("[-9.7,6.5)")
+        domains = domain.Domain(x, x_domain)
+        domains.add_domain(y, y_domain)
 
 
 if __name__ == '__main__':

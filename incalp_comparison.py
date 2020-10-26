@@ -68,7 +68,7 @@ def run_incalp(domain, samples, num_half_spaces, timeout_duration=None):
     selection_strategy = MaxViolationsStrategy(1, weights)
     learner = LPLearner(num_half_spaces, selection_strategy)
     try:
-        if timeout:
+        if timeout_duration:
             model = timeout(learner.learn, [domain, samples, initial_indices], duration=timeout_duration)
         else:
             model = learner.learn(domain, samples, initial_indices)

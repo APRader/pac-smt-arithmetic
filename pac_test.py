@@ -119,6 +119,56 @@ class TestPAC(unittest.TestCase):
         y_domain = interval.Interval("[-9.7,6.5)")
         domains = domain.Domain(x, x_domain)
         domains.add_domain(y, y_domain)
+        formula = domains.create_formula()
+        s = Solver()
+        s.add(formula != And(x > -2.4, x <= 3.1, y >= -9.7, y < 6.5))
+        # Check that the formulas are equivalent
+        self.assertEqual(s.check(), unsat)
+
+    def test_add_domains(self):
+        """
+        Test that you can add domains to your existing domains.
+        """
+        x, y, z = Ints("x y z")
+        x_domain = interval.Interval("(0,inf)")
+        y_domain = interval.Interval((float("-inf"), 0))
+        z_domain = interval.Interval(lower=1, lower_bound="closed", upper=1, upper_bound="closed")
+        domains = domain.Domain(x, x_domain)
+        domains.add_domains([y, z], [y_domain, z_domain])
+        formula = domains.create_formula()
+        s = Solver()
+        s.add(formula != And(x > 0, y < 0, z == 1))
+        # Check that the formulas are equivalent
+        self.assertEqual(s.check(), unsat)
+
+    def test_remove_domain(self):
+        """
+        Test that you can remove a domain from your existing domains.
+        """
+        x, y = Reals("x y")
+        x_domain = interval.Interval(lower=-6.4, lower_bound="closed", upper=0.8, upper_bound="open")
+        y_domain = interval.Interval([-3.6, 0])
+        domains = domain.Domain([x, y], [x_domain, y_domain])
+        domains.remove_domain(y)
+        formula = domains.create_formula()
+        s = Solver()
+        s.add(formula != And(x >= -6.4, x < 0.8))
+        # Check that the formulas are equivalent
+        self.assertEqual(s.check(), unsat)
+
+    def test_remove_domains(self):
+        """
+        Test that you can remove domains from your existing domains.
+        """
+        x, y, z = Ints("x y z")
+        x_domain = interval.Interval(lower=-6, lower_bound="closed", upper=-3.4, upper_bound="open")
+        domains = domain.Domain([x, y, z], [x_domain, "(0.4,1.8]", "[-5,1)"])
+        domains.remove_domains([x, y])
+        formula = domains.create_formula()
+        s = Solver()
+        s.add(formula != And(z >= -5, z < 1))
+        # Check that the formulas are equivalent
+        self.assertEqual(s.check(), unsat)
 
 
 if __name__ == '__main__':

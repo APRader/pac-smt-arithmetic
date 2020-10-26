@@ -10,6 +10,14 @@ class Bound(Enum):
 
 class Interval:
     def __init__(self, *args, **kwargs):
+        """
+        You can create intervals in the following ways:
+        1. (x,y): tuple for open intervals
+        2. [x,y]: list for closed intervals
+        3. '(x,y]': string for mixed intervals
+        4. x: number for assignments
+        5. lower=x, lower_bound='closed', upper=y, upper_bound='open': kwargs for mixed intervals
+        """
         if len(args) == 1:
             [interval] = args
             if type(interval) is tuple:

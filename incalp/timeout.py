@@ -1,3 +1,4 @@
+# Code taken from Samuel Kolb at https://github.com/samuelkolb/incal/releases
 def timeout(func, args=None, kwargs=None, duration=1, default=None):
     if args is None:
         args = ()

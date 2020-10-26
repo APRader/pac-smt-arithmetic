@@ -4,9 +4,9 @@ from pac import interval as inter
 
 class Domain:
     def __init__(self, variables, intervals):
-        if variables is not list:
+        if type(variables) is not list:
             variables = [variables]
-        if intervals is not list:
+        if type(intervals) is not list:
             intervals = [intervals]
         if len(variables) == len(intervals):
             # All Interval objects are put into the dict directly
@@ -60,4 +60,4 @@ class Domain:
         Create a Z3 formula that restricts the variables to their domains.
         :return: A Z3 formula.
         """
-        return And(domain.create_formula(variable) for variable, domain in self.domain)
+        return And([interval.create_formula(variable) for variable, interval in self.domain.items()])

@@ -22,7 +22,7 @@ from incalp.smt_check import SmtChecker
 from incalp.timeout import timeout
 
 SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
-NUM_RUNS = 3
+NUM_RUNS = 20
 
 
 def get_samples(problem, num_pos_samples, num_neg_samples):

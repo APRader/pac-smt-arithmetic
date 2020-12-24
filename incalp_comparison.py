@@ -22,7 +22,7 @@ from incalp.smt_check import SmtChecker
 from incalp.timeout import timeout
 
 SAMPLE_SIZES = [50, 100, 200, 300, 400, 500]
-NUM_RUNS = 10
+NUM_RUNS = 3
 
 
 def get_samples(problem, num_pos_samples, num_neg_samples):
@@ -527,6 +527,13 @@ def main():
         mean_pac_f_errors = np.nanmean(pac_f_errors, axis=2)
         std_incalp_f_errors = np.nanstd(incalp_f_errors, axis=2)
         std_pac_f_errors = np.nanstd(pac_f_errors, axis=2)
+
+    # Save numpy arrays
+    np.savez(f"output/{random_string}_{problem_type}_data.npz",
+             mean_incalp_runtimes=mean_incalp_runtimes, mean_pac_runtimes=mean_pac_runtimes,
+             std_incalp_runtimes=std_incalp_runtimes, std_pac_runtimes=std_pac_runtimes,
+             mean_incalp_f_errors=mean_incalp_f_errors, mean_pac_f_errors=mean_pac_f_errors,
+             std_incalp_f_errors=std_incalp_f_errors, std_pac_f_errors=std_pac_f_errors)
 
     # Plotting running times
     create_plots(problem_type, mean_incalp_runtimes, mean_pac_runtimes, std_incalp_runtimes, std_pac_runtimes,

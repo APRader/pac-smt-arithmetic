@@ -123,6 +123,43 @@ class TestPAC(unittest.TestCase):
         # The query is only valid if x is restricted to its domain.
         self.assertTrue(learner.decide_pac(examples, query, 0.9))
 
+    def test_optimise_pac_max_neg(self):
+        """
+        Test that OptimisePAC can find a maximum negative objective value.
+        """
+        x = Real('x')
+        objective_f = x
+        examples = [[interval.Interval(x, [-1, -0.5])], [interval.Interval(x, [-1.1, -0.7])]]
+        learner = pac_learner.PACLearner()
+        # The maximum is approximately -0.5
+        self.assertAlmostEqual(learner.optimise_pac(examples, objective_f, accuracy=25), -0.5)
+
+    def test_optimise_pac_min_neg(self):
+        """
+        Test that OptimisePAC can find a minimum negative objective value.
+        """
+        x, y = Reals('x, y')
+        objective_f = x - y
+        examples = [[interval.Interval(x, lower=-0.6, lower_bound="open", upper=0.5, upper_bound="closed"),
+                     interval.Interval(y, lower=-8.6, lower_bound="open", upper=5.2, upper_bound="closed")],
+                    [interval.Interval(x, lower=1.1, lower_bound="open", upper=9.2, upper_bound="closed"),
+                     interval.Interval(y, lower=-9, lower_bound="open", upper=-3.9, upper_bound="closed")]]
+        learner = pac_learner.PACLearner()
+        # The minimum is approximately -5.8
+        self.assertAlmostEqual(learner.optimise_pac(examples, objective_f, goal="minimise", accuracy=25), -5.8)
+
+    def test_optimise_pac_max_pos(self):
+        """
+        Test that OptimisePAC can find a maximum positive objective value.
+        """
+        x, y = Reals('x, y')
+        objective_f = x*x + 2*y
+        examples = [[interval.Interval(x, "[-6.1,0.4)"), interval.Interval(y, "[-3.5,-1.2)")],
+                    [interval.Interval(x, "[-0.6,9.4)"), interval.Interval(y, "[-4.8,-3.3)")]]
+        learner = pac_learner.PACLearner()
+        # The maximum is approximately 81.76
+        self.assertAlmostEqual(learner.optimise_pac(examples, objective_f, accuracy=30), 81.76)
+
 
 if __name__ == '__main__':
     unittest.main()

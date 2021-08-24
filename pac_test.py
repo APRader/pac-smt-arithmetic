@@ -141,24 +141,49 @@ class TestPAC(unittest.TestCase):
         x, y = Reals('x, y')
         objective_f = x - y
         examples = [[interval.Interval(x, lower=-0.6, lower_bound="open", upper=0.5, upper_bound="closed"),
-                     interval.Interval(y, lower=-8.6, lower_bound="open", upper=5.2, upper_bound="closed")],
+                     interval.Interval(y, lower=-8.6, lower_bound="open", upper=0.2, upper_bound="closed")],
                     [interval.Interval(x, lower=1.1, lower_bound="open", upper=9.2, upper_bound="closed"),
                      interval.Interval(y, lower=-9, lower_bound="open", upper=-3.9, upper_bound="closed")]]
         learner = pac_learner.PACLearner()
-        # The minimum is approximately -5.8
-        self.assertAlmostEqual(learner.optimise_pac(examples, objective_f, goal="minimise", accuracy=25), -5.8)
+        # The minimum is approximately -0.8
+        self.assertAlmostEqual(learner.optimise_pac(examples, objective_f, goal="minimise", accuracy=25), -0.8)
 
     def test_optimise_pac_max_pos(self):
         """
         Test that OptimisePAC can find a maximum positive objective value.
         """
         x, y = Reals('x, y')
-        objective_f = x*x + 2*y
+        objective_f = x * x + 2 * y
         examples = [[interval.Interval(x, "[-6.1,0.4)"), interval.Interval(y, "[-3.5,-1.2)")],
                     [interval.Interval(x, "[-0.6,9.4)"), interval.Interval(y, "[-4.8,-3.3)")]]
         learner = pac_learner.PACLearner()
         # The maximum is approximately 81.76
         self.assertAlmostEqual(learner.optimise_pac(examples, objective_f, accuracy=30), 81.76)
+
+    def test_optimise_pac_min_pos(self):
+        """
+        YEET: use inf, and result has to be >1
+        Test that OptimisePAC can find a minimum negative objective value.
+        """
+        x, y = Reals('x, y')
+        objective_f = 1000*x + y
+        examples = [[interval.Interval(x, [3.7, 6.7]), interval.Interval(y, [-7.8, 3.6])],
+                    [interval.Interval(x, [4.7, 9.7]), interval.Interval(y, [-1.1, 4.1])]]
+        learner = pac_learner.PACLearner()
+        # The minimum is approximately 3692.2
+        self.assertAlmostEqual(learner.optimise_pac(examples, objective_f, goal="minimise", accuracy=35), 3692.2)
+
+    def test_optimise_pac_zero(self):
+        """
+        Test that OptimisePAC can find the objective value zero.
+        """
+        x, y = Reals('x, y')
+        objective_f = x * y
+        examples = [[interval.Interval(x, -3.1), interval.Interval(y, -8.1)],
+                    [interval.Interval(x, 0), interval.Interval(y, 7.5)]]
+        learner = pac_learner.PACLearner()
+        # The maximum is approximately 0
+        self.assertAlmostEqual(learner.optimise_pac(examples, objective_f, goal="minimise", accuracy=30), 0)
 
 
 if __name__ == '__main__':

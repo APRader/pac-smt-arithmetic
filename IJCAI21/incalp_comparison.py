@@ -397,7 +397,7 @@ def main():
     # Creating a random log file name before seed is set
     characters = string.ascii_letters + string.digits
     random_string = ''.join((random.choice(characters) for _ in range(5)))
-    log_path = f"output/{random_string}_{problem_type}_log.txt"
+    log_path = f"IJCAI21/output/{random_string}_{problem_type}_log.txt"
     print(f"Log file: {log_path}")
 
     # Setting the seed for random number generators
